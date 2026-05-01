@@ -1,0 +1,11 @@
+@import "tailwindcss";
+@import "@fortawesome/fontawesome-free/css/all.min.css";
+
+@layer components {
+  .form-label  { @apply block text-xs font-medium text-gray-400 mb-1; }
+  .form-input  { @apply w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors; }
+  .form-select { @apply w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors appearance-none cursor-pointer; }
+  .btn-primary   { @apply px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors; }
+  .btn-secondary { @apply px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm font-medium text-gray-200 transition-colors; }
+  .btn-danger    { @apply px-4 py-2 bg-red-700 hover:bg-red-600 rounded text-sm font-medium transition-colors; }
+}
