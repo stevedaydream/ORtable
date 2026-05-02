@@ -24,9 +24,9 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgzRTQ4RDQwRjk2MjU0OUYKUldTZlZHTDVRSTNrZ3l3a2g5UTdnbG1wUGJoV1k4Z2xhTTNxcXlQK3kvRU55TEd2STNXNFlzQnAK",
       "endpoints": [
-        "https://github.com/YOUR_ORG/ORtable/releases/latest/download/latest.json"
+        "https://github.com/stevedaydream/ORtable/releases/latest/download/latest.json"
       ]
     }
   },

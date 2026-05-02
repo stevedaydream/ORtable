@@ -7,7 +7,7 @@
 //      執行身分：我、存取權限：所有人（含匿名）
 //   5. 複製部署 URL，貼入 OR Triage 設定頁面的 GAS URL 欄位
 
-const SPREADSHEET_ID = '1fRZBsXdfCOMAPYsYlTrQyYfVssXxfWKaijnGZZsiqtlC4k8dD9BDHYKe';  // ← 填入你的試算表 ID
+const SPREADSHEET_ID = '1cZB0Z7bwspie_3D_uN78WY9fNBa14C1HUFBzenyTLP8';  // ← 填入你的試算表 ID
 
 // ── Sheet 欄位定義 ─────────────────────────────────────────────────────────────
 

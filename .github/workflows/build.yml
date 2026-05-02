@@ -46,6 +46,24 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Generate changelog
+        id: changelog
+        shell: bash
+        run: |
+          PREV=$(git tag --sort=-version:refname | sed -n '2p')
+          if [ -z "$PREV" ]; then
+            LOG=$(git log --pretty=format:"- %s (%h)" HEAD)
+          else
+            LOG=$(git log --pretty=format:"- %s (%h)" "$PREV"..HEAD)
+          fi
+          {
+            echo "body<<EOF"
+            echo "## 更新內容"
+            echo ""
+            echo "$LOG"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build & release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -55,9 +73,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Smart OR Triage ${{ github.ref_name }}
-          releaseBody: |
-            ## 更新內容
-            請參閱 CHANGELOG。
+          releaseBody: ${{ steps.changelog.outputs.body }}
           releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.target }}

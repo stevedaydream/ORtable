@@ -380,6 +380,45 @@ src-tauri/
     staff_roster.rs          # staff_roster：get_by_date / replace_by_month
 ```
 
+Phase 9: 自費項目、互動細節修正與批量操作 ✅ 完成
+
+反應式修正（detailTask 快照問題）：
+  PendingQueuePanel / TimelinePanel / PatientListPanel 的 detailTask 改為
+  detailTaskId = ref<number|null> + computed(() => store.tasks.find(...))，
+  確保 PatientDetailModal 接收到 live store reference，狀態切換即時反映。
+
+PendingQueuePanel：
+  waitingTasks 改以 status === "waiting" 過濾（之前會混入已排程病患）。
+
+PDF 欄位解析修正（ImportModal.vue）：
+  術式欄（x≈458）被錯誤歸入部位欄（center≈422）；
+  改用 35% 右偏邊界法：boundary = centers[c] + (centers[c+1]−centers[c]) × 0.35，
+  修正後術式正確解析。
+
+PatientCard.vue — queue 模式 vs_note 顯示：
+  新增黃色提示列（bg-yellow-900/30 + 驚嘆號圖示）置於卡片底部，
+  timeline 模式維持原有小字斜體。
+
+自費項目（SelfPay Items）全端實作：
+  DB：selfpay_items 表（id/name/price/notes），migrate 冪等 CREATE TABLE IF NOT EXISTS。
+  Rust：db/selfpay_items.rs CRUD、models.rs SelfPayItem struct、4 支 Tauri commands
+    (get_all/create/update/delete_selfpay_item)，lib.rs 已註冊（共 39 支）。
+  前端 types/index.ts + useDatabase.ts useSelfPayDb() invoke wrapper。
+  SelfPayPickerModal.vue：搜尋篩選、checkbox 多選、確認後附加 name($price) 至 task.vs_note。
+  PendingQueuePanel + TimelinePanel 右鍵選單新增「添加自費備注」→ 開啟 SelfPayPickerModal。
+  SettingsModal 第 5 分頁「自費項目」：CRUD 列表 + inline 新增/編輯表單。
+  CSV 範本下載（BOM + 3 示範列）、CSV 匯入（BOM 剝除、表頭映射、預覽確認）。
+
+SettingsModal.vue — 1.3× zoom 溢出修正：
+  容器改為 max-h-[96vh] overflow-hidden；chrome 緊湊化（p-2 backdrop、py-3 header、
+  px-4 py-3 body）；Tab 列改為 text-xs px-3 py-2 + overflow-x-auto whitespace-nowrap。
+
+PatientListPanel.vue — 批量選取與刪除：
+  selectedIds = ref(new Set<number>())；allSelected/someSelected computed；
+  表頭全選 checkbox（含 indeterminate 狀態）；列 checkbox（@click.stop 防穿透）；
+  slide-down 批量操作列（已選 N 筆 + 批量刪除按鈕）；
+  單筆 / 批量共用確認 dialog；篩選條件變更自動清除選取。
+
 8. 已知問題 / 待辦
 
 - 初次使用需手動至「設定 → 人員管理」新增人員，才能使用可分配人員面板
