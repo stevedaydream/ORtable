@@ -1,31 +1,97 @@
 <template>
-  <div class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" @mousedown.self="$emit('close')">
-    <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh]">
+  <div class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-2" @mousedown.self="$emit('close')">
+    <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[96vh] overflow-hidden">
 
       <!-- Header -->
-      <div class="flex items-center justify-between px-5 py-4 border-b border-gray-700 shrink-0">
-        <h2 class="text-base font-bold text-white"><i class="fa-solid fa-gear text-gray-400 mr-2"></i>設定</h2>
+      <div class="flex items-center justify-between px-5 py-3 border-b border-gray-700 shrink-0">
+        <h2 class="text-sm font-bold text-white"><i class="fa-solid fa-gear text-gray-400 mr-2"></i>設定</h2>
         <button class="text-gray-400 hover:text-white" @click="$emit('close')">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
 
       <!-- Tabs -->
-      <div class="flex border-b border-gray-700 shrink-0 px-5">
+      <div class="flex border-b border-gray-700 shrink-0 px-3 overflow-x-auto">
         <button
           v-for="t in TABS" :key="t.key"
-          class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
-          :class="tab === t.key
-            ? 'border-blue-500 text-blue-400'
-            : 'border-transparent text-gray-400 hover:text-gray-200'"
+          class="px-3 py-2 text-xs font-medium border-b-2 transition-colors whitespace-nowrap"
+          :class="tab === t.key ? 'border-blue-500 text-blue-400' : 'border-transparent text-gray-400 hover:text-gray-200'"
           @click="tab = t.key"
         >
-          <i :class="`fa-solid ${t.icon} mr-1.5`"></i>{{ t.label }}
+          <i :class="`fa-solid ${t.icon} mr-1`"></i>{{ t.label }}
         </button>
       </div>
 
       <!-- Body -->
-      <div class="flex-1 overflow-y-auto p-5">
+      <div class="flex-1 overflow-y-auto px-4 py-3">
+
+        <!-- ── 科別管理 ──────────────────────────────────────────── -->
+        <template v-if="tab === 'depts'">
+          <div class="flex items-center justify-between mb-4">
+            <span class="text-sm text-gray-400">共 {{ deptRulesStore.rules.length }} 個科別設定</span>
+            <button class="btn-primary text-xs" @click="startAddDept">
+              <i class="fa-solid fa-plus mr-1"></i>新增科別設定
+            </button>
+          </div>
+
+          <div class="space-y-2">
+            <div
+              v-for="rule in deptRulesStore.rules" :key="rule.dept"
+              class="bg-gray-700/50 rounded-lg p-3 border border-gray-700"
+            >
+              <div class="flex items-center gap-3 mb-2">
+                <div class="w-4 h-4 rounded border border-gray-500 shrink-0" :class="rule.color"></div>
+                <span class="text-sm font-bold text-gray-100 flex-1">{{ rule.dept }}</span>
+                <div class="flex gap-1.5">
+                  <button class="text-gray-500 hover:text-blue-400 text-xs px-1" @click="startEditDept(rule)">
+                    <i class="fa-solid fa-pen"></i>
+                  </button>
+                  <button class="text-gray-500 hover:text-red-400 text-xs px-1" @click="deptRulesStore.remove(rule.dept)">
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="flex items-center gap-4 text-[10px] text-gray-400 ml-7">
+                <span><i class="fa-solid fa-arrow-up-wide-short mr-1"></i>權重加分: {{ rule.priority_bonus }}</span>
+                <span class="truncate"><i class="fa-solid fa-thumbs-up mr-1"></i>偏好房間: {{ (rule.preferred_rooms || []).join(', ') || '無' }}</span>
+              </div>
+            </div>
+            
+            <div v-if="deptRulesStore.rules.length === 0" class="text-center text-gray-600 py-8 text-sm">
+              尚未設定科別規則，建議設定科別專屬顏色
+            </div>
+          </div>
+
+          <!-- Dept Form -->
+          <div v-if="deptForm.open" class="mt-4 bg-gray-700/60 rounded-xl p-4 border border-gray-600">
+            <div class="text-sm font-semibold text-gray-300 mb-3">設定科別：{{ deptForm.dept || '(新科別)' }}</div>
+            <div class="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label class="form-label">科別名稱 <span class="text-red-400">*</span></label>
+                <input v-model="deptForm.dept" class="form-input" placeholder="骨科" :disabled="deptForm.isEdit" />
+              </div>
+              <div>
+                <label class="form-label">優先權加分</label>
+                <input v-model.number="deptForm.priority_bonus" type="number" class="form-input" />
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">科別代表色</label>
+              <div class="flex flex-wrap gap-2 mt-1">
+                <button
+                  v-for="c in PRESET_COLORS" :key="c"
+                  class="w-8 h-8 rounded-lg border-2 transition-all"
+                  :class="[c, deptForm.color === c ? 'border-white scale-110 shadow-lg' : 'border-transparent opacity-60 hover:opacity-100']"
+                  @click="deptForm.color = c"
+                ></button>
+              </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-4">
+              <button class="btn-secondary text-xs" @click="deptForm.open = false">取消</button>
+              <button class="btn-primary text-xs" :disabled="!deptForm.dept.trim()" @click="saveDept">儲存設定</button>
+            </div>
+          </div>
+        </template>
 
         <!-- ── 房間管理 ──────────────────────────────────────────── -->
         <template v-if="tab === 'rooms'">
@@ -33,12 +99,44 @@
             <span class="text-sm text-gray-400">共 {{ roomsStore.rooms.length }} 間手術室</span>
             <div class="flex gap-2">
               <button class="btn-secondary text-xs flex items-center gap-1.5" @click="triggerXlsx">
-                <i class="fa-solid fa-file-excel text-green-400"></i>匯入月排班 (.xlsx)
+                <i class="fa-solid fa-file-excel text-green-400"></i>匯入刀房科別時段 (.xlsx)
               </button>
               <input ref="xlsxInput" type="file" accept=".xlsx,.xls" class="hidden" @change="onXlsxFile" />
+              <button class="btn-secondary text-xs" @click="toggleBatchRoom">
+                <i class="fa-solid fa-list-ul mr-1"></i>批量新增
+              </button>
               <button class="btn-primary text-xs" @click="startAddRoom">
                 <i class="fa-solid fa-plus mr-1"></i>新增房間
               </button>
+            </div>
+          </div>
+
+          <!-- Batch room add panel -->
+          <div v-if="batchRoom.open" class="mb-4 bg-gray-700/60 rounded-xl p-4 border border-blue-700/40">
+            <div class="text-sm font-semibold text-gray-300 mb-1">批量新增房間</div>
+            <p class="text-xs text-gray-500 mb-2">每行一個房間名稱，已存在的名稱自動略過</p>
+            <textarea
+              v-model="batchRoom.text"
+              rows="6"
+              class="form-input resize-none font-mono text-xs"
+              placeholder="OR1&#10;OR2&#10;OR3&#10;急救刀房&#10;備用刀房"
+            />
+            <div class="flex items-center justify-between mt-3">
+              <span class="text-xs text-gray-500">
+                待新增 <span class="text-white font-medium">{{ batchRoomNew.length }}</span> 間
+                <template v-if="batchRoomSkip.length">，略過重複 {{ batchRoomSkip.length }} 間</template>
+              </span>
+              <div class="flex gap-2">
+                <button class="btn-secondary text-xs" @click="batchRoom.open = false">取消</button>
+                <button
+                  class="btn-primary text-xs"
+                  :disabled="batchRoomNew.length === 0 || batchRoom.saving"
+                  @click="saveBatchRooms"
+                >
+                  <i v-if="batchRoom.saving" class="fa-solid fa-spinner animate-spin mr-1"></i>
+                  新增 {{ batchRoomNew.length }} 間
+                </button>
+              </div>
             </div>
           </div>
 
@@ -93,23 +191,27 @@
           </div>
 
           <!-- XLSX preview -->
-          <div v-if="xlsxPreview.length > 0" class="mt-4 bg-gray-900/60 rounded-xl p-4 border border-green-700/50">
+          <div v-if="xlsxPreview.length > 0 || xlsxErrors.length > 0" class="mt-4 bg-gray-900/60 rounded-xl p-4 border" :class="xlsxPreview.length > 0 ? 'border-green-700/50' : 'border-red-900/50'">
             <div class="flex items-center justify-between mb-3">
-              <div class="text-sm font-semibold text-green-300">
-                <i class="fa-solid fa-table mr-1.5"></i>預覽匯入 — {{ xlsxMonth }}（共 {{ xlsxPreview.length }} 筆）
+              <div class="text-sm font-semibold" :class="xlsxPreview.length > 0 ? 'text-green-300' : 'text-red-400'">
+                <i class="fa-solid" :class="xlsxPreview.length > 0 ? 'fa-table' : 'fa-circle-exclamation'"></i>
+                {{ xlsxPreview.length > 0 ? `預覽刀房時段匯入 — ${xlsxMonth}（共 ${xlsxPreview.length} 筆）` : '檔案解析失敗' }}
               </div>
               <div class="flex gap-2">
-                <button class="btn-secondary text-xs" @click="xlsxPreview = []">取消</button>
-                <button class="btn-primary text-xs" :disabled="importSaving" @click="confirmXlsxImport">
+                <button class="btn-secondary text-xs" @click="xlsxPreview = []; xlsxErrors = []">關閉</button>
+                <button v-if="xlsxPreview.length > 0" class="btn-primary text-xs" :disabled="importSaving" @click="confirmXlsxImport">
                   <i v-if="importSaving" class="fa-solid fa-spinner animate-spin mr-1"></i>
                   確認匯入
                 </button>
               </div>
             </div>
-            <div v-if="xlsxErrors.length" class="mb-2 text-xs text-red-400">
-              略過 {{ xlsxErrors.length }} 筆無效資料
+            
+            <div v-if="xlsxErrors.length" class="mb-2 p-2 bg-red-950/20 border border-red-900/30 rounded text-[10px] text-red-400 max-h-32 overflow-y-auto">
+              <div class="font-bold mb-1">解析錯誤 ({{ xlsxErrors.length }} 筆):</div>
+              <div v-for="(err, i) in xlsxErrors" :key="i" class="font-mono">{{ err }}</div>
             </div>
-            <div class="overflow-x-auto max-h-52">
+
+            <div v-if="xlsxPreview.length > 0" class="overflow-x-auto max-h-52">
               <table class="w-full text-xs text-gray-300 border-collapse">
                 <thead>
                   <tr class="text-gray-500 border-b border-gray-700">
@@ -143,9 +245,134 @@
         <template v-if="tab === 'staff'">
           <div class="flex items-center justify-between mb-4">
             <span class="text-sm text-gray-400">共 {{ staffStore.staffList.length }} 名人員</span>
-            <button class="btn-primary text-xs" @click="startAddStaff">
-              <i class="fa-solid fa-plus mr-1"></i>新增人員
+            <div class="flex gap-2">
+              <div class="flex flex-col items-end">
+                <button class="btn-secondary text-xs flex items-center gap-1.5" @click="triggerStaffXlsx">
+                  <i class="fa-solid fa-calendar-check text-green-400"></i>匯入人員月排班 (.xlsx)
+                </button>
+                <span class="text-[9px] text-gray-500 mt-1">※ 用於人員指派及 Extra 線勞基法判別</span>
+              </div>
+              <input ref="staffXlsxInput" type="file" accept=".xlsx,.xls" class="hidden" @change="onStaffXlsxFile" />
+              <button class="btn-secondary text-xs" @click="toggleBatchStaff">
+                <i class="fa-solid fa-list-ul mr-1"></i>批量新增
+              </button>
+              <button class="btn-primary text-xs" @click="startAddStaff">
+                <i class="fa-solid fa-plus mr-1"></i>新增人員
+              </button>
+            </div>
+          </div>
+
+          <!-- Staff assignment xlsx preview -->
+          <div v-if="staffXlsxPreview.length > 0 || staffXlsxErrors.length > 0" class="mb-4 bg-gray-900/60 rounded-xl p-4 border" :class="staffXlsxPreview.length > 0 ? 'border-green-700/50' : 'border-red-900/50'">
+            <div class="flex items-center justify-between mb-3">
+              <div class="text-sm font-semibold" :class="staffXlsxPreview.length > 0 ? 'text-green-300' : 'text-red-400'">
+                <i class="fa-solid" :class="staffXlsxPreview.length > 0 ? 'fa-calendar-days' : 'fa-circle-exclamation'"></i>
+                {{ staffXlsxPreview.length > 0 ? `預覽人員月排班 — ${staffXlsxMonth}（共 ${staffXlsxPreview.length} 筆）` : '班表解析失敗' }}
+              </div>
+              <div class="flex gap-2">
+                <button class="btn-secondary text-xs" @click="staffXlsxPreview = []; staffXlsxErrors = []">關閉</button>
+                <button v-if="staffXlsxPreview.length > 0" class="btn-primary text-xs" :disabled="staffXlsxSaving" @click="confirmStaffXlsxImport">
+                  <i v-if="staffXlsxSaving" class="fa-solid fa-spinner animate-spin mr-1"></i>
+                  確認匯入
+                </button>
+              </div>
+            </div>
+
+            <div v-if="staffXlsxErrors.length" class="mb-2 p-2 bg-red-950/20 border border-red-900/30 rounded text-[10px] text-red-400 max-h-32 overflow-y-auto">
+              <div class="font-bold mb-1">解析錯誤 ({{ staffXlsxErrors.length }} 筆):</div>
+              <div v-for="(err, i) in staffXlsxErrors" :key="i" class="font-mono">{{ err }}</div>
+            </div>
+
+            <div v-if="staffXlsxPreview.length > 0" class="overflow-x-auto max-h-48">
+              <table class="w-full text-xs text-gray-300 border-collapse">
+                <thead>
+                  <tr class="text-gray-500 border-b border-gray-700">
+                    <th class="text-left py-1 px-2">日期</th>
+                    <th class="text-left py-1 px-2">姓名</th>
+                    <th class="text-left py-1 px-2">班別</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(a, i) in staffXlsxPreview.slice(0, 10)" :key="i" class="border-b border-gray-800">
+                    <td class="py-1 px-2">{{ a.date }}</td>
+                    <td class="py-1 px-2">{{ a.staff_name }}</td>
+                    <td class="py-1 px-2">{{ a.shift_name }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="staffXlsxPreview.length > 10" class="text-center text-gray-600 text-xs py-1">
+                … 還有 {{ staffXlsxPreview.length - 10 }} 筆
+              </div>
+            </div>
+            <p class="text-[10px] text-gray-600 mt-2">
+              匯入後將取代 {{ staffXlsxMonth }} 整月的人員班表資料
+            </p>
+          </div>
+
+          <!-- Batch staff add panel -->
+          <div v-if="batchStaff.open" class="mb-4 bg-gray-700/60 rounded-xl p-4 border border-blue-700/40">
+            <div class="text-sm font-semibold text-gray-300 mb-3">批量新增人員</div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs border-collapse">
+                <thead>
+                  <tr class="text-gray-500 border-b border-gray-600">
+                    <th class="text-left pb-2 pr-2 font-medium w-32">姓名 <span class="text-red-400">*</span></th>
+                    <th class="text-left pb-2 pr-2 font-medium w-40">類別</th>
+                    <th class="text-left pb-2 pr-2 font-medium">所屬單位</th>
+                    <th class="pb-2 w-6"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, i) in batchStaff.rows" :key="i" class="border-b border-gray-700/40">
+                    <td class="py-1 pr-2">
+                      <input
+                        v-model="row.name"
+                        class="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-gray-100 placeholder-gray-600 outline-none focus:border-blue-500"
+                        placeholder="姓名"
+                      />
+                    </td>
+                    <td class="py-1 pr-2">
+                      <select v-model="row.staff_category" class="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-gray-100 outline-none focus:border-blue-500">
+                        <option v-for="(label, key) in CATEGORY_LABELS" :key="key" :value="key">{{ label }}</option>
+                      </select>
+                    </td>
+                    <td class="py-1 pr-2">
+                      <input
+                        v-if="row.staff_category === 'cross_train'"
+                        v-model="row.unit"
+                        class="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-gray-100 placeholder-gray-600 outline-none focus:border-blue-500"
+                        placeholder="單位名稱"
+                      />
+                      <span v-else class="text-gray-700">—</span>
+                    </td>
+                    <td class="py-1 text-center">
+                      <button class="text-gray-600 hover:text-red-400" @click="batchStaff.rows.splice(i, 1)">
+                        <i class="fa-solid fa-xmark"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <button class="mt-2 text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1" @click="addBatchStaffRow">
+              <i class="fa-solid fa-plus"></i> 新增一行
             </button>
+            <div class="flex items-center justify-between mt-3">
+              <span class="text-xs text-gray-500">
+                有效筆數：<span class="text-white font-medium">{{ validBatchStaffRows }}</span>
+              </span>
+              <div class="flex gap-2">
+                <button class="btn-secondary text-xs" @click="batchStaff.open = false">取消</button>
+                <button
+                  class="btn-primary text-xs"
+                  :disabled="validBatchStaffRows === 0 || batchStaff.saving"
+                  @click="saveBatchStaff"
+                >
+                  <i v-if="batchStaff.saving" class="fa-solid fa-spinner animate-spin mr-1"></i>
+                  儲存 {{ validBatchStaffRows }} 筆
+                </button>
+              </div>
+            </div>
           </div>
 
           <!-- Staff add/edit inline form -->
@@ -167,15 +394,6 @@
               <div v-if="staffForm.staff_category === 'cross_train'">
                 <label class="form-label">所屬單位 <span class="text-red-400">*</span></label>
                 <input v-model="staffForm.unit" class="form-input" placeholder="心臟外科加護病房" />
-              </div>
-              <div>
-                <label class="form-label">手術室角色</label>
-                <select v-model="staffForm.role" class="form-input">
-                  <option value="Scrub">刷手 (Scrub)</option>
-                  <option value="Circ">流動 (Circ)</option>
-                  <option value="R">住院醫師 (R)</option>
-                  <option value="VS">主治醫師 (VS)</option>
-                </select>
               </div>
             </div>
             <div class="flex gap-4 mt-3">
@@ -218,7 +436,6 @@
                   <i class="fa-solid fa-user text-gray-500 text-xs w-4 text-center"></i>
                   <span class="flex-1 text-sm text-gray-100">{{ s.name }}</span>
                   <span v-if="s.unit" class="text-[10px] text-gray-500 truncate max-w-[100px]">{{ s.unit }}</span>
-                  <span class="text-[10px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded">{{ s.role }}</span>
                   <span v-if="s.is_on_call" class="text-[10px] text-yellow-400 bg-yellow-900/40 px-1.5 py-0.5 rounded">值班</span>
                   <span v-if="s.is_volunteer_extra" class="text-[10px] text-purple-400 bg-purple-900/40 px-1.5 py-0.5 rounded">Extra</span>
                   <button class="text-gray-500 hover:text-blue-400 text-xs px-1" @click="startEditStaff(s)">
@@ -233,6 +450,111 @@
           </div>
           <div v-if="staffStore.staffList.length === 0" class="text-center text-gray-600 py-8 text-sm">
             尚未設定人員，請點擊「新增人員」
+          </div>
+        </template>
+
+        <!-- ── 自費項目 ──────────────────────────────────────────── -->
+        <template v-if="tab === 'selfpay'">
+          <div class="flex items-center justify-between mb-4">
+            <span class="text-sm text-gray-400">共 {{ selfPayItems.length }} 個自費項目</span>
+            <div class="flex gap-2">
+              <button class="btn-secondary text-xs flex items-center gap-1.5" @click="downloadSelfPayTemplate">
+                <i class="fa-solid fa-file-arrow-down text-green-400"></i>下載範本
+              </button>
+              <button class="btn-secondary text-xs flex items-center gap-1.5" @click="selfPayImportInput?.click()">
+                <i class="fa-solid fa-file-import text-blue-400"></i>匯入 CSV
+              </button>
+              <input ref="selfPayImportInput" type="file" accept=".csv,.txt" class="hidden" @change="onSelfPayCsvFile" />
+              <button class="btn-primary text-xs" @click="startAddSelfPay">
+                <i class="fa-solid fa-plus mr-1"></i>新增項目
+              </button>
+            </div>
+          </div>
+
+          <!-- Import preview -->
+          <div v-if="selfPayImport.rows.length > 0" class="mb-4 bg-gray-900/60 rounded-xl p-4 border border-blue-700/40">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-sm font-semibold text-blue-300">
+                <i class="fa-solid fa-table mr-1.5"></i>預覽匯入（{{ selfPayImport.rows.length }} 筆）
+              </span>
+              <div class="flex gap-2">
+                <button class="btn-secondary text-xs" @click="selfPayImport.rows = []">取消</button>
+                <button class="btn-primary text-xs" :disabled="selfPayImport.saving" @click="confirmSelfPayImport">
+                  <i v-if="selfPayImport.saving" class="fa-solid fa-spinner animate-spin mr-1"></i>
+                  確認匯入
+                </button>
+              </div>
+            </div>
+            <div v-if="selfPayImport.errors.length" class="mb-2 text-[10px] text-red-400 bg-red-950/30 rounded p-2">
+              略過 {{ selfPayImport.errors.length }} 筆無效行
+            </div>
+            <div class="overflow-x-auto max-h-40">
+              <table class="w-full text-xs text-gray-300 border-collapse">
+                <thead><tr class="text-gray-500 border-b border-gray-700">
+                  <th class="text-left py-1 px-2">項目名稱</th>
+                  <th class="text-left py-1 px-2">費用</th>
+                  <th class="text-left py-1 px-2">備注</th>
+                </tr></thead>
+                <tbody>
+                  <tr v-for="(r, i) in selfPayImport.rows.slice(0, 8)" :key="i" class="border-b border-gray-800">
+                    <td class="py-1 px-2">{{ r.name }}</td>
+                    <td class="py-1 px-2 font-mono">${{ r.price }}</td>
+                    <td class="py-1 px-2 text-gray-500">{{ r.notes }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="selfPayImport.rows.length > 8" class="text-center text-gray-600 text-xs py-1">
+                … 還有 {{ selfPayImport.rows.length - 8 }} 筆
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-1.5 mb-4">
+            <div
+              v-for="item in selfPayItems" :key="item.id"
+              class="flex items-center gap-3 bg-gray-700/50 rounded-lg px-3 py-2.5"
+            >
+              <i class="fa-solid fa-receipt text-yellow-400 text-xs w-4 text-center"></i>
+              <span class="flex-1 text-sm text-gray-100 font-medium">{{ item.name }}</span>
+              <span v-if="item.price > 0" class="text-xs text-yellow-300 font-mono shrink-0">${{ item.price.toLocaleString() }}</span>
+              <span v-if="item.notes" class="text-[10px] text-gray-500 truncate max-w-[100px]">{{ item.notes }}</span>
+              <button class="text-gray-500 hover:text-blue-400 text-xs px-1" @click="startEditSelfPay(item)">
+                <i class="fa-solid fa-pen"></i>
+              </button>
+              <button class="text-gray-500 hover:text-red-400 text-xs px-1" @click="deleteSelfPay(item.id)">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </div>
+            <div v-if="selfPayItems.length === 0" class="text-center text-gray-600 py-8 text-sm">
+              尚未設定自費項目，請點擊「新增項目」
+            </div>
+          </div>
+
+          <!-- Self-Pay add/edit inline form -->
+          <div v-if="selfPayForm.open" class="bg-gray-700/60 rounded-xl p-4 border border-gray-600">
+            <div class="text-sm font-semibold text-gray-300 mb-3">
+              {{ selfPayForm.id ? '編輯自費項目' : '新增自費項目' }}
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="col-span-2">
+                <label class="form-label">項目名稱 <span class="text-red-400">*</span></label>
+                <input v-model="selfPayForm.name" class="form-input" placeholder="自費手套" />
+              </div>
+              <div>
+                <label class="form-label">費用（元）</label>
+                <input v-model.number="selfPayForm.price" type="number" min="0" class="form-input" placeholder="0" />
+              </div>
+              <div>
+                <label class="form-label">備注</label>
+                <input v-model="selfPayForm.notes" class="form-input" placeholder="選填說明" />
+              </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-3">
+              <button class="btn-secondary text-xs" @click="selfPayForm.open = false">取消</button>
+              <button class="btn-primary text-xs" :disabled="!selfPayForm.name.trim()" @click="saveSelfPay">
+                {{ selfPayForm.id ? '儲存' : '新增' }}
+              </button>
+            </div>
           </div>
         </template>
 
@@ -266,26 +588,193 @@ import { ref, reactive, computed, onMounted } from "vue";
 import * as XLSX from "xlsx";
 import { useRoomsStore } from "../stores/rooms";
 import { useStaffStore } from "../stores/staff";
-import { useRoomShiftsDb, useSettings } from "../composables/useDatabase";
-import type { Room, Staff, RoomScheduleEntry, StaffCategory } from "../types";
+import { useDeptRulesStore } from "../stores/deptRules";
+import { useRoomShiftsDb, useStaffRosterDb, useSettings, useSelfPayDb } from "../composables/useDatabase";
+import { useLogger } from "../composables/useLogger";
+import type { Room, SelfPayItem, Staff, RoomScheduleEntry, StaffCategory, StaffRosterEntry } from "../types";
 import { STAFF_CATEGORY_LABELS } from "../types";
 
 defineEmits<{ close: [] }>();
 
-const tab = ref<"rooms" | "staff" | "cloud">("rooms");
+const tab = ref<"rooms" | "staff" | "depts" | "selfpay" | "cloud">("rooms");
+const logger = useLogger();
+
 const TABS = [
-  { key: "rooms", label: "房間管理", icon: "fa-door-open" },
-  { key: "staff", label: "人員管理", icon: "fa-users" },
-  { key: "cloud", label: "雲端設定", icon: "fa-cloud" },
+  { key: "rooms",   label: "房間管理", icon: "fa-door-open" },
+  { key: "staff",   label: "人員管理", icon: "fa-users" },
+  { key: "depts",   label: "科別管理", icon: "fa-layer-group" },
+  { key: "selfpay", label: "自費項目", icon: "fa-receipt" },
+  { key: "cloud",   label: "雲端設定", icon: "fa-cloud" },
 ] as const;
 
 const CATEGORY_LABELS = STAFF_CATEGORY_LABELS;
-const CATEGORIES: StaffCategory[] = ["sa", "or_nurse", "intern", "cross_train"];
+const CATEGORIES: StaffCategory[] = ["vs", "r", "sa", "or_nurse", "intern", "cross_train"];
 
 const roomsStore = useRoomsStore();
 const staffStore = useStaffStore();
+const deptRulesStore = useDeptRulesStore();
 const roomShiftsDb = useRoomShiftsDb();
+const staffRosterDb = useStaffRosterDb();
 const { getGasUrl, setGasUrl } = useSettings();
+
+// ── Dept Rules form ───────────────────────────────────────────────────────────
+const PRESET_COLORS = [
+  "bg-blue-800 text-blue-100",  "bg-green-800 text-green-100",
+  "bg-purple-800 text-purple-100", "bg-yellow-800 text-yellow-100",
+  "bg-pink-800 text-pink-100",  "bg-teal-800 text-teal-100",
+  "bg-orange-800 text-orange-100", "bg-cyan-800 text-cyan-100",
+  "bg-red-800 text-red-100", "bg-indigo-800 text-indigo-100",
+  "bg-gray-800 text-gray-100", "bg-slate-700 text-slate-100",
+];
+
+const deptForm = reactive({
+  open: false,
+  isEdit: false,
+  dept: "",
+  priority_bonus: 0,
+  preferred_rooms: [] as string[],
+  color: PRESET_COLORS[0],
+});
+
+function startAddDept() {
+  Object.assign(deptForm, {
+    open: true,
+    isEdit: false,
+    dept: "",
+    priority_bonus: 0,
+    preferred_rooms: [],
+    color: PRESET_COLORS[0],
+  });
+}
+
+function startEditDept(rule: any) {
+  Object.assign(deptForm, {
+    open: true,
+    isEdit: true,
+    dept: rule.dept,
+    priority_bonus: rule.priority_bonus,
+    preferred_rooms: [...(rule.preferred_rooms || [])],
+    color: rule.color,
+  });
+}
+
+async function saveDept() {
+  if (!deptForm.dept.trim()) return;
+  await deptRulesStore.upsert({
+    dept: deptForm.dept.trim(),
+    priority_bonus: deptForm.priority_bonus,
+    preferred_rooms: deptForm.preferred_rooms,
+    color: deptForm.color,
+  });
+  deptForm.open = false;
+}
+
+// ── Batch room add ────────────────────────────────────────────────────────────
+const batchRoom = reactive({ open: false, text: "", saving: false });
+
+function toggleBatchRoom() {
+  batchRoom.open = !batchRoom.open;
+  if (batchRoom.open) {
+    batchRoom.text = "";
+    roomForm.open = false;
+  }
+}
+
+const batchRoomLines = computed(() =>
+  batchRoom.text.split("\n").map((l) => l.trim()).filter(Boolean)
+);
+const existingNames = computed(() => new Set(roomsStore.rooms.map((r) => r.name)));
+const batchRoomNew = computed(() => batchRoomLines.value.filter((n) => !existingNames.value.has(n)));
+const batchRoomSkip = computed(() => batchRoomLines.value.filter((n) => existingNames.value.has(n)));
+
+async function saveBatchRooms() {
+  if (batchRoomNew.value.length === 0) return;
+  batchRoom.saving = true;
+  try {
+    for (const name of batchRoomNew.value) {
+      await roomsStore.add({ id: 0, name, display_order: roomsStore.rooms.length, is_backup: false });
+    }
+    batchRoom.open = false;
+    batchRoom.text = "";
+  } finally {
+    batchRoom.saving = false;
+  }
+}
+
+// ── Batch staff add ───────────────────────────────────────────────────────────
+interface BatchStaffRow {
+  name: string;
+  staff_category: StaffCategory;
+  unit: string;
+}
+
+const batchStaff = reactive<{ open: boolean; saving: boolean; rows: BatchStaffRow[] }>({
+  open: false,
+  saving: false,
+  rows: [],
+});
+
+function toggleBatchStaff() {
+  batchStaff.open = !batchStaff.open;
+  if (batchStaff.open) {
+    batchStaff.rows = [newBatchRow()];
+    staffForm.open = false;
+  }
+}
+
+function newBatchRow(): BatchStaffRow {
+  return { name: "", staff_category: "or_nurse", unit: "" };
+}
+
+function categoryToDefaultRole(cat: StaffCategory): Staff["role"] {
+  const map: Record<StaffCategory, Staff["role"]> = {
+    vs: "VS", r: "R", sa: "SA", or_nurse: "Circ", intern: "R", cross_train: "Circ",
+  };
+  return map[cat];
+}
+
+function addBatchStaffRow() {
+  batchStaff.rows.push(newBatchRow());
+}
+
+const validBatchStaffRows = computed(() =>
+  batchStaff.rows.filter((r) => {
+    if (!r.name.trim()) return false;
+    if (r.staff_category === "cross_train" && !r.unit.trim()) return false;
+    return true;
+  }).length
+);
+
+async function saveBatchStaff() {
+  const now = Math.floor(Date.now() / 1000);
+  const valid = batchStaff.rows.filter((r) => {
+    if (!r.name.trim()) return false;
+    if (r.staff_category === "cross_train" && !r.unit.trim()) return false;
+    return true;
+  });
+  if (valid.length === 0) return;
+  batchStaff.saving = true;
+  try {
+    for (const row of valid) {
+      await staffStore.add({
+        id: 0,
+        name: row.name.trim(),
+        role: categoryToDefaultRole(row.staff_category),
+        type: "nur",
+        staff_category: row.staff_category,
+        unit: row.unit.trim(),
+        is_on_call: false,
+        is_volunteer_extra: false,
+        today_shift_start: now,
+        next_day_shift_start: now + 86400,
+      });
+    }
+    batchStaff.open = false;
+    batchStaff.rows = [];
+  } finally {
+    batchStaff.saving = false;
+  }
+}
 
 // ── Room form ─────────────────────────────────────────────────────────────────
 const roomForm = reactive({
@@ -297,6 +786,7 @@ const roomForm = reactive({
 });
 
 function startAddRoom() {
+  batchRoom.open = false;
   Object.assign(roomForm, { open: true, id: 0, name: "", display_order: roomsStore.rooms.length, is_backup: false });
 }
 
@@ -339,91 +829,123 @@ function triggerXlsx() {
 function onXlsxFile(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0];
   if (!file) return;
+  logger.addLog("info", `[XLSX] 選擇檔案: ${file.name} (${file.size} bytes)`);
   const reader = new FileReader();
   reader.onload = (ev) => {
-    const data = new Uint8Array(ev.target!.result as ArrayBuffer);
-    parseXlsx(data);
+    try {
+      const data = new Uint8Array(ev.target!.result as ArrayBuffer);
+      parseXlsx(data);
+    } catch (err) {
+      logger.addLog("error", `[XLSX] 讀取過程錯誤: ${err}`);
+    }
     (e.target as HTMLInputElement).value = "";
   };
+  reader.onerror = () => logger.addLog("error", "[XLSX] FileReader 讀取失敗");
   reader.readAsArrayBuffer(file);
 }
 
-const COL_ALIASES: Record<string, string> = {
-  date: "date", 日期: "date", 手術日期: "date",
-  room: "room", 房間: "room", 刀房: "room", 手術室: "room",
-  dept: "dept", 科別: "dept", 科室: "dept", 使用科別: "dept",
-  start: "start", 開始: "start", 開始時間: "start", 起始時間: "start",
-  end: "end", 結束: "end", 結束時間: "end",
-  notes: "notes", 備注: "notes", 備忘: "notes", 說明: "notes",
+// AM: 07:30~12:30 | PM: 12:30~15:50 | 值班: 15:50~隔日07:30 (seconds from midnight)
+const PERIOD_TIMES: Record<string, { start: number; end: number }> = {
+  AM: { start: 7 * 3600 + 30 * 60, end: 12 * 3600 + 30 * 60 },
+  PM: { start: 12 * 3600 + 30 * 60, end: 15 * 3600 + 50 * 60 },
+  值班: { start: 15 * 3600 + 50 * 60, end: 31 * 3600 + 30 * 60 },
 };
 
-function parseXlsx(data: Uint8Array) {
-  const wb = XLSX.read(data, { type: "array", cellDates: true });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(ws, { raw: false, defval: "" });
-
-  const entries: RoomScheduleEntry[] = [];
-  const errors: string[] = [];
-
-  for (const row of rows) {
-    // Normalize keys
-    const norm: Record<string, string> = {};
-    for (const [k, v] of Object.entries(row)) {
-      const mapped = COL_ALIASES[k.trim()];
-      if (mapped) norm[mapped] = String(v ?? "").trim();
-    }
-
-    const dateStr = parseExcelDate(norm["date"]);
-    const roomName = norm["room"]?.trim();
-    const dept = norm["dept"]?.trim();
-    const startSecs = parseExcelTime(norm["start"]);
-    const endSecs = parseExcelTime(norm["end"]);
-
-    if (!dateStr || !roomName || !dept || startSecs === null || endSecs === null) {
-      errors.push(`略過: ${JSON.stringify(norm)}`);
-      continue;
-    }
-
-    const midnight = dateToMidnightUnix(dateStr);
-    entries.push({
-      id: 0,
-      room_name: roomName,
-      dept,
-      date: dateStr,
-      start_time: midnight + startSecs,
-      end_time: midnight + endSecs,
-      notes: norm["notes"] ?? "",
-    });
-  }
-
-  if (entries.length === 0) {
-    errors.push("未解析到任何有效資料，請確認欄位名稱（日期/房間/科別/開始/結束）");
-  }
-
-  // Detect month from first entry
-  xlsxMonth.value = entries[0]?.date?.slice(0, 7) ?? "";
-  xlsxPreview.value = entries;
-  xlsxErrors.value = errors;
+function excelSerialToDateStr(serial: number): string {
+  // Excel serial = days since 1899-12-30 (accounting for Lotus leap-year bug)
+  const date = new Date(Math.round((serial - 25569) * 86400 * 1000));
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
-function parseExcelDate(val: string | undefined): string | null {
+function parseXlsx(data: Uint8Array) {
+  logger.addLog("info", "[XLSX] 開始解析刀房年度排班（樞紐格式）...");
+  try {
+    const wb = XLSX.read(data, { type: "array", raw: true });
+    logger.addLog("info", `[XLSX] 找到 ${wb.SheetNames.length} 個分頁: ${wb.SheetNames.join(", ")}`);
+
+    const entries: RoomScheduleEntry[] = [];
+
+    for (const sheetName of wb.SheetNames) {
+      const ws = wb.Sheets[sheetName];
+      const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", raw: true });
+
+      let weekDates: (string | null)[] = [];
+      let currentRoom = "";
+
+      for (const row of rows) {
+        const col0 = String(row[0] ?? "").trim();
+        const col1 = String(row[1] ?? "").trim().toUpperCase();
+
+        // Week header row (第N週): columns 2-8 hold Excel serial dates for Mon-Sun
+        if (col0.startsWith("第") && col0.endsWith("週")) {
+          weekDates = (row.slice(2, 9) as any[]).map((v) => {
+            const n = typeof v === "number" ? v : parseFloat(String(v));
+            return isNaN(n) || n < 1 ? null : excelSerialToDateStr(n);
+          });
+          continue;
+        }
+
+        // Track current room name (col A non-empty = new room)
+        if (col0 !== "") currentRoom = col0;
+
+        // Data row: col B = AM | PM | 值班 / 值班時段
+        const periodKey = col1 === "AM" || col1 === "PM" ? col1
+          : (col1 === "值班" || col1 === "值班時段" ? "值班" : null);
+        if (periodKey && currentRoom && weekDates.length > 0) {
+          const times = PERIOD_TIMES[periodKey];
+          for (let i = 0; i < 7; i++) {
+            const dept = String(row[i + 2] ?? "").trim();
+            const dateStr = weekDates[i];
+            if (!dept || !dateStr) continue;
+            entries.push({
+              id: 0,
+              room_name: currentRoom,
+              dept,
+              date: dateStr,
+              start_time: dateToMidnightUnix(dateStr) + times.start,
+              end_time:   dateToMidnightUnix(dateStr) + times.end,
+              notes: "",
+            });
+          }
+        }
+      }
+      logger.addLog("info", `[XLSX] 分頁 ${sheetName}: 目前累計 ${entries.length} 筆`);
+    }
+
+    if (entries.length === 0) {
+      logger.addLog("error", "[XLSX] 解析失敗：未找到資料，請確認格式正確（週次、時段、星期一~日）。");
+    } else {
+      const months = [...new Set(entries.map(e => e.date.slice(0, 7)))].sort();
+      const year = entries[0].date.slice(0, 4);
+      xlsxMonth.value = months.length >= 12 ? `${year} 整年度` : months.join("、");
+      logger.addLog("info", `[XLSX] 成功解析 ${entries.length} 筆，涵蓋 ${months.length} 個月份`);
+    }
+
+    xlsxPreview.value = entries;
+    xlsxErrors.value  = [];
+  } catch (err) {
+    logger.addLog("error", `[XLSX] 檔案讀取崩潰: ${err}`);
+  }
+}
+
+function parseExcelDate(val: any): string | null {
   if (!val) return null;
+  if (val instanceof Date) {
+    return `${val.getFullYear()}-${String(val.getMonth() + 1).padStart(2, "0")}-${String(val.getDate()).padStart(2, "0")}`;
+  }
+  const s = String(val);
   // YYYY/MM/DD or YYYY-MM-DD
-  let m = val.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  let m = s.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
   if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
   // MM/DD/YYYY
-  m = val.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  m = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (m) return `${m[3]}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}`;
   return null;
 }
 
-function parseExcelTime(val: string | undefined): number | null {
-  if (!val) return null;
-  // HH:MM or HH:MM:SS
-  const m = val.match(/^(\d{1,2}):(\d{2})/);
-  if (m) return parseInt(m[1]) * 3600 + parseInt(m[2]) * 60;
-  return null;
-}
 
 function dateToMidnightUnix(dateStr: string): number {
   return Math.floor(new Date(dateStr + "T00:00:00").getTime() / 1000);
@@ -435,21 +957,151 @@ function fmtTs(ts: number): string {
 }
 
 async function confirmXlsxImport() {
-  if (!xlsxMonth.value || xlsxPreview.value.length === 0) return;
+  if (xlsxPreview.value.length === 0) return;
   importSaving.value = true;
+  logger.addLog("info", `[XLSX] 開始寫入年度資料，總計 ${xlsxPreview.value.length} 筆...`);
+  
   try {
-    await roomShiftsDb.replaceByMonth(xlsxMonth.value, xlsxPreview.value);
-    // Auto-create missing rooms
-    for (const e of xlsxPreview.value) {
-      if (!roomsStore.rooms.find((r) => r.name === e.room_name)) {
-        await roomsStore.add({ id: 0, name: e.room_name, display_order: roomsStore.rooms.length, is_backup: false });
+    // 1. 儲存時段資料 (後端已優化為自動跨月處理)
+    await roomShiftsDb.replaceByMonth("", xlsxPreview.value);
+    
+    // 2. 批次補建房間 (優化：先整理出不重複房間名，減少 DB 呼叫)
+    const uniqueRooms = [...new Set(xlsxPreview.value.map(e => e.room_name))];
+    const currentRoomNames = new Set(roomsStore.rooms.map(r => r.name));
+    for (const name of uniqueRooms) {
+      if (!currentRoomNames.has(name)) {
+        await roomsStore.add({ id: 0, name, display_order: roomsStore.rooms.length, is_backup: false });
       }
     }
+
+    // 3. 批次補建科別規則 (優化：先整理出不重複科別)
+    const uniqueDepts = [...new Set(xlsxPreview.value.map(e => e.dept))].filter(Boolean);
+    const currentDeptNames = new Set(deptRulesStore.rules.map(r => r.dept));
+    for (const deptName of uniqueDepts) {
+      if (!currentDeptNames.has(deptName)) {
+        await deptRulesStore.upsert({
+          dept: deptName,
+          priority_bonus: 0,
+          preferred_rooms: [],
+          color: PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)],
+        });
+      }
+    }
+
+    logger.addLog("info", "[XLSX] 匯入成功，正在刷新設定...");
+    await Promise.all([roomsStore.load(), deptRulesStore.load()]);
+    
     xlsxPreview.value = [];
     xlsxErrors.value = [];
+    alert(`整年度資料匯入成功！\n- 共計 ${uniqueRooms.length} 間房間\n- 共計 ${uniqueDepts.length} 個科別設定\n\n系統已自動同步所有設定。`);
+  } catch (err) {
+    logger.addLog("error", `[XLSX] 寫入失敗: ${err}`);
+    alert("寫入資料庫失敗，請查看 Debug Panel");
   } finally {
     importSaving.value = false;
   }
+}
+
+// ── Staff assignment xlsx import ──────────────────────────────────────────────
+const staffXlsxInput   = ref<HTMLInputElement | null>(null);
+const staffXlsxPreview = ref<StaffRosterEntry[]>([]);
+const staffXlsxErrors  = ref<string[]>([]);
+const staffXlsxMonth   = ref("");
+const staffXlsxSaving  = ref(false);
+
+const STAFF_COL_ALIASES: Record<string, string> = {
+  date: "date", 日期: "date", 手術日期: "date",
+  name: "name", 姓名: "name", 人員: "name", 護理師: "name",
+  shift: "shift", 班別: "shift", 班別名稱: "shift",
+};
+
+// ... (省略中間 helper) ...
+
+function parseStaffXlsx(data: Uint8Array) {
+  logger.addLog("info", "[Staff XLSX] 開始解析檔案...");
+  try {
+    const wb   = XLSX.read(data, { type: "array", cellDates: true });
+    const sheetName = wb.SheetNames[0];
+    logger.addLog("info", `[Staff XLSX] 讀取分頁: ${sheetName}`);
+    const ws   = wb.Sheets[sheetName];
+    const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(ws, { raw: false, defval: "" });
+
+    logger.addLog("info", `[Staff XLSX] 讀取到 ${rows.length} 行資料`);
+    if (rows.length > 0) {
+      logger.addLog("info", `[Staff XLSX] 欄位範例: ${Object.keys(rows[0]).join(", ")}`);
+    }
+
+    const entries: StaffRosterEntry[] = [];
+    const errors: string[] = [];
+
+    for (const row of rows) {
+      const norm: Record<string, string> = {};
+      for (const [k, v] of Object.entries(row)) {
+        const mapped = STAFF_COL_ALIASES[k.trim()];
+        if (mapped) norm[mapped] = String(v ?? "").trim();
+      }
+      const dateStr  = parseExcelDate(norm["date"]);
+      const name     = norm["name"]?.trim();
+      const shift    = norm["shift"]?.trim();
+
+      if (!dateStr || !name || !shift) {
+        errors.push(`略過: ${JSON.stringify(row)}`);
+        continue;
+      }
+      entries.push({ id: 0, staff_name: name, date: dateStr, shift_name: shift });
+    }
+
+    if (entries.length === 0) {
+      logger.addLog("error", "[Staff XLSX] 解析失敗：未找到符合格式的資料。請確認 Excel 標題包含：日期、姓名、班別。");
+    } else {
+      logger.addLog("info", `[Staff XLSX] 成功解析 ${entries.length} 筆人員班表`);
+    }
+
+    staffXlsxMonth.value   = entries[0]?.date?.slice(0, 7) ?? "";
+    staffXlsxPreview.value = entries;
+    staffXlsxErrors.value  = errors;
+  } catch (err) {
+    logger.addLog("error", `[Staff XLSX] 檔案讀取崩潰: ${err}`);
+  }
+}
+
+async function confirmStaffXlsxImport() {
+  if (!staffXlsxMonth.value || staffXlsxPreview.value.length === 0) return;
+  staffXlsxSaving.value = true;
+  try {
+    await staffRosterDb.replaceByMonth(staffXlsxMonth.value, staffXlsxPreview.value);
+    staffXlsxPreview.value = [];
+    staffXlsxErrors.value  = [];
+    alert("人員月排班匯入成功！");
+  } catch (err) {
+    logger.addLog("error", `[Staff XLSX] 匯入失敗: ${err}`);
+    alert("匯入失敗，請檢查檔案格式");
+  } finally {
+    staffXlsxSaving.value = false;
+  }
+}
+
+function triggerStaffXlsx() { 
+  logger.addLog("info", "[Staff XLSX] 觸發檔案選擇器");
+  staffXlsxInput.value?.click(); 
+}
+
+function onStaffXlsxFile(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  logger.addLog("info", `[Staff XLSX] 選擇檔案: ${file.name} (${file.size} bytes)`);
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const data = new Uint8Array(ev.target!.result as ArrayBuffer);
+      parseStaffXlsx(data);
+    } catch (err) {
+      logger.addLog("error", `[Staff XLSX] 讀取過程錯誤: ${err}`);
+    }
+    (e.target as HTMLInputElement).value = "";
+  };
+  reader.onerror = () => logger.addLog("error", "[Staff XLSX] FileReader 讀取失敗");
+  reader.readAsArrayBuffer(file);
 }
 
 // ── Staff form ────────────────────────────────────────────────────────────────
@@ -457,7 +1109,6 @@ const staffForm = reactive({
   open: false,
   id: 0,
   name: "",
-  role: "Circ",
   staff_category: "or_nurse" as StaffCategory,
   unit: "",
   is_on_call: false,
@@ -472,16 +1123,21 @@ const staffByCategory = computed(() => {
   return map;
 });
 
+
 function categoryColor(cat: StaffCategory): string {
-  return { sa: "text-blue-400", or_nurse: "text-green-400", intern: "text-yellow-400", cross_train: "text-purple-400" }[cat];
+  return ({
+    vs: "text-red-400", r: "text-blue-400", sa: "text-purple-400",
+    or_nurse: "text-green-400", intern: "text-yellow-400", cross_train: "text-orange-400",
+  } as Record<StaffCategory, string>)[cat] ?? "text-gray-400";
 }
 
 function startAddStaff() {
-  Object.assign(staffForm, { open: true, id: 0, name: "", role: "Circ", staff_category: "or_nurse", unit: "", is_on_call: false, is_volunteer_extra: false });
+  batchStaff.open = false;
+  Object.assign(staffForm, { open: true, id: 0, name: "", staff_category: "or_nurse", unit: "", is_on_call: false, is_volunteer_extra: false });
 }
 
 function startEditStaff(s: Staff) {
-  Object.assign(staffForm, { open: true, id: s.id, name: s.name, role: s.role, staff_category: s.staff_category, unit: s.unit, is_on_call: s.is_on_call, is_volunteer_extra: s.is_volunteer_extra });
+  Object.assign(staffForm, { open: true, id: s.id, name: s.name, staff_category: s.staff_category, unit: s.unit, is_on_call: s.is_on_call, is_volunteer_extra: s.is_volunteer_extra });
 }
 
 async function saveStaff() {
@@ -490,7 +1146,7 @@ async function saveStaff() {
   const payload: Staff = {
     id: staffForm.id,
     name: staffForm.name.trim(),
-    role: staffForm.role as Staff["role"],
+    role: categoryToDefaultRole(staffForm.staff_category),
     type: "nur",
     staff_category: staffForm.staff_category,
     unit: staffForm.unit.trim(),
@@ -512,6 +1168,120 @@ async function deleteStaff(id: number) {
   await staffStore.remove(id);
 }
 
+// ── Self-Pay Items ────────────────────────────────────────────────────────────
+const selfPayDb = useSelfPayDb();
+const selfPayItems = ref<SelfPayItem[]>([]);
+const selfPayImportInput = ref<HTMLInputElement | null>(null);
+const selfPayForm = reactive({
+  open: false,
+  id: 0,
+  name: "",
+  price: 0,
+  notes: "",
+});
+const selfPayImport = reactive<{
+  rows: { name: string; price: number; notes: string }[];
+  errors: string[];
+  saving: boolean;
+}>({ rows: [], errors: [], saving: false });
+
+async function loadSelfPay() {
+  selfPayItems.value = await selfPayDb.getAll();
+}
+
+function startAddSelfPay() {
+  Object.assign(selfPayForm, { open: true, id: 0, name: "", price: 0, notes: "" });
+}
+
+function startEditSelfPay(item: SelfPayItem) {
+  Object.assign(selfPayForm, { open: true, id: item.id, name: item.name, price: item.price, notes: item.notes });
+}
+
+async function saveSelfPay() {
+  if (!selfPayForm.name.trim()) return;
+  const payload: SelfPayItem = { id: selfPayForm.id, name: selfPayForm.name.trim(), price: selfPayForm.price, notes: selfPayForm.notes.trim() };
+  if (selfPayForm.id) {
+    const updated = await selfPayDb.update(payload);
+    const idx = selfPayItems.value.findIndex(i => i.id === updated.id);
+    if (idx !== -1) selfPayItems.value[idx] = updated;
+  } else {
+    const created = await selfPayDb.create(payload);
+    selfPayItems.value.push(created);
+    selfPayItems.value.sort((a, b) => a.name.localeCompare(b.name));
+  }
+  selfPayForm.open = false;
+}
+
+async function deleteSelfPay(id: number) {
+  if (!confirm("確定刪除此自費項目？")) return;
+  await selfPayDb.remove(id);
+  selfPayItems.value = selfPayItems.value.filter(i => i.id !== id);
+}
+
+function downloadSelfPayTemplate() {
+  const header = "name,price,notes";
+  const examples = [
+    "自費手套,200,乳膠手套 7.5 號",
+    "自費縫線,500,",
+    "自費電刀頭,1200,特殊規格",
+  ];
+  const csv = [header, ...examples].join("\r\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "selfpay_template.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function onSelfPayCsvFile(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => parseSelfPayCsv(ev.target?.result as string);
+  reader.readAsText(file, "utf-8");
+  (e.target as HTMLInputElement).value = "";
+}
+
+function parseSelfPayCsv(text: string) {
+  selfPayImport.rows = [];
+  selfPayImport.errors = [];
+  const lines = text.replace(/^﻿/, "").split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) { selfPayImport.errors.push("檔案不足兩行"); return; }
+  const header = lines[0].split(",").map(h => h.trim().toLowerCase());
+  const nameIdx  = header.indexOf("name");
+  const priceIdx = header.indexOf("price");
+  const notesIdx = header.indexOf("notes");
+  if (nameIdx === -1) { selfPayImport.errors.push("找不到 name 欄位"); return; }
+  lines.slice(1).forEach((line, i) => {
+    const cols = line.split(",").map(c => c.trim().replace(/^"|"$/g, ""));
+    const name = cols[nameIdx]?.trim() || "";
+    if (!name) { selfPayImport.errors.push(`第 ${i + 2} 行：空白名稱，略過`); return; }
+    const price = priceIdx !== -1 ? (parseInt(cols[priceIdx] || "0") || 0) : 0;
+    const notes = notesIdx !== -1 ? (cols[notesIdx]?.trim() || "") : "";
+    selfPayImport.rows.push({ name, price, notes });
+  });
+}
+
+async function confirmSelfPayImport() {
+  if (selfPayImport.rows.length === 0) return;
+  selfPayImport.saving = true;
+  try {
+    for (const row of selfPayImport.rows) {
+      const created = await selfPayDb.create({ id: 0, name: row.name, price: row.price, notes: row.notes });
+      selfPayItems.value.push(created);
+    }
+    selfPayItems.value.sort((a, b) => a.name.localeCompare(b.name));
+    selfPayImport.rows = [];
+    selfPayImport.errors = [];
+  } catch (e) {
+    console.error("[SettingsModal] 自費匯入失敗:", e);
+  } finally {
+    selfPayImport.saving = false;
+  }
+}
+
 // ── Cloud settings ────────────────────────────────────────────────────────────
 const gasUrl = ref("");
 const cloudSaved = ref(false);
@@ -523,7 +1293,7 @@ async function saveGasUrl() {
 }
 
 onMounted(async () => {
-  await Promise.all([roomsStore.load(), staffStore.load()]);
+  await Promise.all([roomsStore.load(), staffStore.load(), deptRulesStore.load(), loadSelfPay()]);
   const url = await getGasUrl();
   if (url) gasUrl.value = url;
 });

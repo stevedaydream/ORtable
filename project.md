@@ -156,40 +156,52 @@ GitHub Actions CI/CD（.github/workflows/build.yml）：tag 觸發，Windows x86
 
 ```
 src/
-  App.vue                  # 根元件，2:1 主佈局，監聽 Ctrl+Shift+D
-  main.ts                  # createApp，初始化 Pinia
+  App.vue                   # 根元件，2:1 主佈局，Ctrl+Shift+D，modal 統一管理
+  main.ts                   # createApp，初始化 Pinia，呼叫 initLogger()
   components/
-    DebugPanel.vue          # 開發用 Log 浮動面板
+    DebugPanel.vue           # 開發用 Log 浮動面板（Ctrl+Shift+D，單/雙擊複製）
+    Sidebar.vue              # 左側功能選單（emit: import/addEmergency/toggleBackup/requestExtra/openSettings）
+    TaskFormModal.vue        # 新增急診病患表單（色碼緊急程度選擇器）
+    ImportModal.vue          # CSV + PDF 病患清單匯入（雙 tab；PDF 用 pdfjs-dist 解析手術紀錄表）
+    ExtraLineModal.vue       # Extra 線申請（即時 batch_check_extra_compliance）
+    SettingsModal.vue        # 設定（3 分頁：房間管理 / 人員管理 / 雲端設定）
+    TimelinePanel.vue        # 房間總覽時間軸（07:30-07:30，60px/hr，科別色塊，現在線）
   composables/
-    useLogger.ts            # singleton logger，攔截全域錯誤
-    useDatabase.ts          # DB CRUD wrappers (useTasksDb/useStaffDb/useDeptRulesDb/useSettings)
-    useSync.ts              # GAS push/pull/timestamps
+    useLogger.ts             # singleton logger（攔截 console.error/warn, fetch, onerror）
+    useDatabase.ts           # invoke wrappers：useTasksDb/useStaffDb/useRoomsDb/useRoomShiftsDb/useDeptRulesDb/useSettings
+    useSync.ts               # GAS push/pull/timestamps（錯誤自動 console.error → DebugPanel）
+    useUpdater.ts            # tauri-plugin-updater 背景更新檢查
+    useTaskEngine.ts         # invoke 封裝：get_tasks_with_scores / batch_check_extra_compliance
   stores/
-    tasks.ts                # Pinia: SurgeryTask 狀態
-    staff.ts                # Pinia: Staff 狀態
+    tasks.ts                 # Pinia: SurgeryTask（load/add/edit/remove）
+    staff.ts                 # Pinia: Staff（load/add/edit/remove）
+    rooms.ts                 # Pinia: Room（load/add/edit/remove）
   types/
-    index.ts                # TypeScript 型別定義與常數
+    index.ts                 # 全部 TS 型別與常數（UrgencyLevel/Staff/Room/RoomScheduleEntry/...）
   assets/
-    main.css                # Tailwind CSS 入口
+    main.css                 # Tailwind CSS v4 入口 + @layer components（form-label/form-input/btn-*）
 src-tauri/
   src/
-    lib.rs                  # Tauri builder，載入外掛與 commands
-    main.rs                 # 程式進入點
-    models.rs               # Rust 資料結構 (+ DeptRule, TaskWithScore, StaffComplianceResult)
-    engine.rs               # Rule Engine：priority_score / sort_tasks / batch_compliance
-    state.rs                # AppState { db: SqlitePool }
-    sync.rs                 # GAS HTTP push/pull（reqwest）
-    commands.rs             # 全部 Tauri commands（引擎 + CRUD + sync）
+    lib.rs                   # Tauri builder：plugins + setup(block_on DB init) + invoke_handler(25 commands)
+    main.rs                  # 程式進入點
+    models.rs                # 全部 Rust struct（SurgeryTask/Staff/Room/RoomScheduleEntry/DeptRule/TaskWithScore/...）
+    engine.rs                # Rule Engine：priority_score/sort_tasks/check_compliance/batch_compliance（5 單元測試）
+    state.rs                 # AppState { db: SqlitePool }
+    sync.rs                  # GAS HTTP push/pull（reqwest 0.12，tokio::try_join! 並行 GET）
+    commands.rs              # 全部 Tauri commands（引擎 + Tasks/Staff/Rooms/RoomShifts/DeptRules/Settings/Sync）
   db/
-    mod.rs                  # 連線初始化、migrate（4 張表）
-    tasks.rs                # surgery_tasks CRUD
-    staff.rs                # staff CRUD
-    dept_rules.rs           # dept_rules CRUD + upsert
-    settings.rs             # settings key/value get/set
+    mod.rs                   # 連線初始化、migrate（6 張表）、ALTER TABLE 補欄位
+    tasks.rs                 # surgery_tasks CRUD（runtime sqlx query，手動 map_row）
+    staff.rs                 # staff CRUD（bool↔INTEGER，staff_category/unit 欄位）
+    rooms.rs                 # rooms CRUD
+    room_shifts.rs           # room_shifts：get_by_date / replace_by_month（transaction）
+    dept_rules.rs            # dept_rules CRUD + upsert（preferred_rooms 為 JSON 字串）
+    settings.rs              # settings key/value get/set
 gas/
-  Code.gs                   # GAS Web App 腳本（部署至 Google Apps Script）
-  composables/
-    useTaskEngine.ts        # 封裝 invoke：loadTasks / checkStaffCompliance / checkSingleCompliance
+  Code.gs                    # GAS Web App（doGet: getTasks/getStaff/getDeptRules/ping；doPost: syncAll）
+.github/
+  workflows/
+    build.yml                # tag 觸發，Windows x86_64 + macOS ARM + macOS x86 三平台並行建置
 ```
 
 Phase 5: 房間管理、人員管理與 Timeline UI ✅ 完成
@@ -206,14 +218,171 @@ Tauri commands：get_all_rooms / create_room / update_room / delete_room、
   get_room_shifts_by_date / replace_room_shifts_by_month
 
 前端：
-  SettingsModal.vue — 3 分頁：房間管理（CRUD + xlsx 月排班匯入 auto-create rooms）、
-    人員管理（SA/開刀房護理師/實習生/其他單位待訓練人員 CRUD）、
-    雲端設定（GAS URL，從 Sidebar 移入）
-  TimelinePanel.vue — 房間總覽時間軸（07:30-07:30，60px/hr，科別色塊、現在線、空房提示）
+  SettingsModal.vue — 4 分頁：房間管理（CRUD + xlsx 月排班匯入 auto-create rooms）、
+    人員管理（SA/開刀房護理師/實習生/其他單位待訓練人員 CRUD + 批次新增）、
+    科別管理（DeptRule CRUD + 色彩選擇器）、
+    雲端設定（GAS URL）
+  TimelinePanel.vue — 房間總覽時間軸（07:30-07:30，60px/hr、科別色塊、現在線、空房提示）
   Sidebar「設定」按鈕改為觸發 SettingsModal（emit openSettings）
   xlsx (SheetJS) 用於解析 .xlsx 月排班，支援中文欄名、自動補建房間
 
+Phase 6: 人員指派、待排定區與 Schema 擴充 ✅ 完成
+
+SurgeryTask 模型擴充（配合真實 PDF 排程欄位）：
+  新增欄位：seq_no, gender, age, bed_no, body_part, anesthesia, surgeon
+  db/mod.rs migrate() 以 ALTER TABLE 補欄位（冪等），向下相容
+
+新增資料模型：
+  StaffAssignment { id, staff_name, room_name, date, role } — staff_assignments 表（拖拉指派）
+  StaffRosterEntry { id, staff_name, date, shift_name } — staff_roster 表（月班表）
+  ShiftDefinition { name, start_time, end_time, is_on_call } — shift_definitions 表
+
+DB 層：db/staff_assignments.rs（get_by_date / add_one / remove_one / replace_by_month）
+       db/staff_roster.rs（get_by_date / replace_by_month）
+
+Tauri commands：
+  get_staff_assignments_by_date / replace_staff_assignments_by_month /
+  add_staff_assignment / remove_staff_assignment（指派操作）
+  get_staff_roster_by_date / replace_staff_roster_by_month（班表）
+
+前端新元件：
+  StaffPoolPanel.vue — 可分配人員面板（依類別分群、拖拉 / 右鍵指派至房間、右鍵兩步驟選房間+角色）
+  PendingQueuePanel.vue — 待排定病患卡片列表（waiting 狀態）
+  PatientCard.vue — 統一病患卡片元件（queue 模式 / timeline 模式）
+  ContextMenu.vue — 可重用浮動右鍵選單（Teleport to body，跨元件使用）
+
+前端新 Composable / Store：
+  useDragState.ts — singleton 共享拖曳狀態（isDragging, dragType: "staff"|"task"|"assignment"|null）
+  stores/assignments.ts — Pinia store：StaffAssignment（load/add/remove）
+  stores/deptRules.ts — Pinia store：DeptRule（load/upsert/remove，從 SettingsModal 抽離）
+
+SettingsModal.vue 擴充：
+  人員月排班（Staff Roster）XLSX 匯入 — 解析「日期/姓名/班別」格式存入 staff_roster 表
+  XLSX 解析器重寫（房間月排班）：支援真實樞紐表格式（週次/AM/PM/值班/星期一~日），
+    每分頁一個月份，全年 12 分頁一次匯入，AM=07:30~12:30、PM=12:30~15:50、值班=15:50~隔日07:30
+
+useDatabase.ts 擴充：
+  useStaffAssignmentsDb()：invoke wrapper for 4 commands
+  useStaffRosterDb()：invoke wrapper for 2 commands
+  useTasksDb().batchCreate()：invoke wrapper for batch_create_tasks
+
+Phase 8: 病患狀態管理、詳細資料 Modal、科別房間分配、病人清單視圖 ✅ 完成
+
+新增 TaskStatus 型別（types/index.ts）：
+  waiting → scheduled → called（已叫刀）→ in_surgery（手術中）→ recovery（恢復室）
+  TASK_STATUS_LABELS / TASK_STATUS_COLORS 常數供各元件共用
+
+新增元件：
+  PatientDetailModal.vue — 點擊病患卡片開啟；顯示全部欄位、狀態快速切換列、
+    inline 編輯模式（12 欄表單）、刪除（含確認 overlay）；Teleport to body
+  DeptRoomModal.vue — 科別房間分配；日期選擇器（計算星期）、CRUD 表格
+    （inline 編輯列 + 新增列）、儲存呼叫 replace_room_shifts_by_date 僅覆寫當日
+  PatientListPanel.vue — 本日病人清單全頁視圖；搜尋 + 狀態篩選、點整列開啟
+    PatientDetailModal、刪除確認彈窗；App.vue view='patient_list' 切換顯示
+
+Sidebar.vue 新按鈕：
+  「科別房間分配」(teal) → emit open-dept-room → App.vue modal='dept_room'
+  「本日病人清單」(cyan) → emit open-patient-list → App.vue view='patient_list'
+
+App.vue：
+  modal 型別擴充加 'dept_room'；新增 view ref ('board'|'patient_list')；
+  v-if/v-else-if 切換 Board / PatientListPanel；掛載 DeptRoomModal
+
+PatientCard.vue（timeline 模式）：
+  狀態標籤 badge：叫（amber）/ 進（green/pulse）/ 完（purple）
+
+TimelinePanel.vue：
+  病患卡加 @click → detailTask（PatientDetailModal）
+  右鍵選單加：已叫刀 / 手術中（進線）/ 恢復室 三個快速狀態切換按鈕（setTaskStatus()）
+  scheduledTasksForRoom：今天顯示所有非 waiting；歷史日期以 scheduled_at 落點篩選
+
+PendingQueuePanel.vue：
+  病患卡加 @click → detailTask（PatientDetailModal）
+
+新增後端：
+  db/room_shifts.rs → replace_by_date()（DELETE + INSERT for single date in tx）
+  commands.rs → replace_room_shifts_by_date command
+  lib.rs → 註冊新 command（現共 35 支）
+  useDatabase.ts → useRoomShiftsDb().replaceByDate()
+
+Phase 7: PDF 匯入與日期選擇器 ✅ 完成
+
+ImportModal.vue 擴充（CSV + PDF 雙模式）：
+  PDF 排程表 tab — pdfjs-dist v5 解析 HIS 匯出的「手術紀錄表」橫式 PDF
+  解析策略：text item 位置分群 → 行列重建 → 17 欄對應 → rowToTask()
+  民國年轉換（ROC + 1911）、預起時間組成 scheduled_at unix timestamp
+  房號 WT → status="waiting"；其餘房號 → status="scheduled"
+  批次匯入：batch_create_tasks（transaction，單次 invoke）
+  預覽分頁：全部 / 已排 / 待排；顯示房號/序號/姓名/科別/手術者/麻醉/預起/狀態
+
+新增 Tauri command：
+  batch_create_tasks(tasks: SurgeryTask[]) — 批次 INSERT，使用 transaction
+
+TimelinePanel.vue 日期選擇器：
+  Toolbar 日期改為 <input type="date">，[color-scheme:dark] 深色日曆彈窗
+  切換日期重新載入 room_shifts + assignments；非今天顯示「今天」跳回按鈕
+  nowY（現在線）邏輯不變：查看非今天時自動隱藏
+
+7. 目錄結構
+
+```
+src/
+  App.vue                   # 根元件，2:1 主佈局，Ctrl+Shift+D，modal 統一管理
+  main.ts                   # createApp，初始化 Pinia，呼叫 initLogger()
+  components/
+    DebugPanel.vue           # 開發用 Log 浮動面板（Ctrl+Shift+D，單/雙擊複製）
+    Sidebar.vue              # 左側功能選單（emit: import/addEmergency/toggleBackup/requestExtra/openSettings）
+    TaskFormModal.vue        # 新增急診病患表單（色碼緊急程度選擇器）
+    ImportModal.vue          # CSV 病患清單匯入（拖放 + FileReader + 中英文欄名映射）
+    ExtraLineModal.vue       # Extra 線申請（即時 batch_check_extra_compliance）
+    SettingsModal.vue        # 設定（4 分頁：房間管理 / 人員管理 / 科別管理 / 雲端設定）
+    TimelinePanel.vue        # 房間總覽時間軸（07:30-07:30，60px/hr，科別色塊，現在線）
+    StaffPoolPanel.vue       # 可分配人員面板（依類別分群，拖拉/右鍵指派）
+    PendingQueuePanel.vue    # 待排定病患卡片（waiting 狀態列表）
+    PatientCard.vue          # 統一病患卡片（queue / timeline 兩種模式）
+    ContextMenu.vue          # 可重用浮動右鍵選單（Teleport to body）
+  composables/
+    useLogger.ts             # singleton logger（攔截 console.error/warn, fetch, onerror）
+    useDatabase.ts           # invoke wrappers：useTasksDb/useStaffDb/useRoomsDb/useRoomShiftsDb/
+                             #   useDeptRulesDb/useStaffAssignmentsDb/useStaffRosterDb/useSettings
+    useSync.ts               # GAS push/pull/timestamps（錯誤自動 console.error → DebugPanel）
+    useUpdater.ts            # tauri-plugin-updater 背景更新檢查
+    useTaskEngine.ts         # invoke 封裝：get_tasks_with_scores / batch_check_extra_compliance
+    useDragState.ts          # singleton：isDragging / dragType（"staff"|"task"|"assignment"|null）
+  stores/
+    tasks.ts                 # Pinia: SurgeryTask（load/add/edit/remove）
+    staff.ts                 # Pinia: Staff（load/add/edit/remove）
+    rooms.ts                 # Pinia: Room（load/add/edit/remove）
+    assignments.ts           # Pinia: StaffAssignment（load/add/remove）
+    deptRules.ts             # Pinia: DeptRule（load/upsert/remove）
+  types/
+    index.ts                 # 全部 TS 型別與常數
+  assets/
+    main.css                 # Tailwind CSS v4 入口 + @layer components（form-label/form-input/btn-*）
+src-tauri/
+  src/
+    lib.rs                   # Tauri builder：plugins + setup(block_on DB init) + invoke_handler(33 commands)
+    main.rs                  # 程式進入點
+    models.rs                # 全部 Rust struct（含 StaffAssignment/StaffRosterEntry/ShiftDefinition）
+    engine.rs                # Rule Engine：priority_score/sort_tasks/check_compliance（5 單元測試）
+    state.rs                 # AppState { db: SqlitePool }
+    sync.rs                  # GAS HTTP push/pull（reqwest 0.12，tokio::try_join! 並行 GET）
+    commands.rs              # 全部 Tauri commands（33 支）
+  db/
+    mod.rs                   # 連線初始化、migrate（9 張表）、ALTER TABLE 補欄位
+    tasks.rs                 # surgery_tasks CRUD
+    staff.rs                 # staff CRUD（bool↔INTEGER，staff_category/unit 欄位）
+    rooms.rs                 # rooms CRUD
+    room_shifts.rs           # room_shifts：get_by_date / replace_by_month（transaction）
+    dept_rules.rs            # dept_rules CRUD + upsert（preferred_rooms 為 JSON 字串）
+    settings.rs              # settings key/value get/set
+    staff_assignments.rs     # staff_assignments：get_by_date / add_one / remove_one / replace_by_month
+    staff_roster.rs          # staff_roster：get_by_date / replace_by_month
+```
+
 8. 已知問題 / 待辦
 
-- 待排定區 TaskQueue UI 尚未實作（顯示 waiting 病患卡片、拖拉分配）
-- Timeline 拖拉人員指派（刷手/流動/助手至房間標頭）尚未實作
+- 初次使用需手動至「設定 → 人員管理」新增人員，才能使用可分配人員面板
+- PendingQueuePanel 完整的拖拉至 Timeline 排班尚待驗證
+- staff_roster XLSX 匯入的班別與勞基法防呆計算尚未整合（today_shift_start 仍為手動設定）
+- 房間月排班 XLSX 目前只解析樞紐表格式（週次/時段/星期），不支援其他版型

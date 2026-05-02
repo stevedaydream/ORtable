@@ -1,6 +1,6 @@
 use crate::{
     db, engine, sync,
-    models::{DeptRule, ExtraComplianceResult, Room, RoomScheduleEntry, Staff, StaffComplianceResult, SurgeryTask, TaskWithScore},
+    models::{DeptRule, ExtraComplianceResult, Room, RoomScheduleEntry, SelfPayItem, Staff, StaffAssignment, StaffComplianceResult, StaffRosterEntry, SurgeryTask, TaskWithScore},
     state::AppState,
 };
 
@@ -78,6 +78,14 @@ pub async fn delete_task(
     db::tasks::delete(&state.db, id).await
 }
 
+#[tauri::command]
+pub async fn batch_create_tasks(
+    state: tauri::State<'_, AppState>,
+    tasks: Vec<SurgeryTask>,
+) -> Result<(), String> {
+    db::tasks::batch_create(&state.db, &tasks).await
+}
+
 // ── Staff CRUD ────────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -132,7 +140,18 @@ pub async fn delete_dept_rule(
     db::dept_rules::delete(&state.db, &dept).await
 }
 
-// ── Settings ──────────────────────────────────────────────────────────────────
+// ── Staff Roster & Shifts ──────────────────────────────────────────────────
+#[tauri::command]
+pub async fn get_staff_roster_by_date(state: tauri::State<'_, AppState>, date: String) -> Result<Vec<StaffRosterEntry>, String> {
+    db::staff_roster::get_by_date(&state.db, &date).await
+}
+
+#[tauri::command]
+pub async fn replace_staff_roster_by_month(state: tauri::State<'_, AppState>, month: String, entries: Vec<StaffRosterEntry>) -> Result<(), String> {
+    db::staff_roster::replace_by_month(&state.db, &month, &entries).await
+}
+
+// ── Sync ───────────────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn get_gas_url(state: tauri::State<'_, AppState>) -> Result<Option<String>, String> {
@@ -195,6 +214,81 @@ pub async fn replace_room_shifts_by_month(
     entries: Vec<RoomScheduleEntry>,
 ) -> Result<(), String> {
     db::room_shifts::replace_by_month(&state.db, &month, &entries).await
+}
+
+#[tauri::command]
+pub async fn replace_room_shifts_by_date(
+    state: tauri::State<'_, AppState>,
+    date: String,
+    entries: Vec<RoomScheduleEntry>,
+) -> Result<(), String> {
+    db::room_shifts::replace_by_date(&state.db, &date, &entries).await
+}
+
+// ── Staff Assignments ─────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn get_staff_assignments_by_date(
+    state: tauri::State<'_, AppState>,
+    date: String,
+) -> Result<Vec<StaffAssignment>, String> {
+    db::staff_assignments::get_by_date(&state.db, &date).await
+}
+
+#[tauri::command]
+pub async fn replace_staff_assignments_by_month(
+    state: tauri::State<'_, AppState>,
+    month: String,
+    entries: Vec<StaffAssignment>,
+) -> Result<(), String> {
+    db::staff_assignments::replace_by_month(&state.db, &month, &entries).await
+}
+
+#[tauri::command]
+pub async fn add_staff_assignment(
+    state: tauri::State<'_, AppState>,
+    entry: StaffAssignment,
+) -> Result<StaffAssignment, String> {
+    db::staff_assignments::add_one(&state.db, &entry).await
+}
+
+#[tauri::command]
+pub async fn remove_staff_assignment(
+    state: tauri::State<'_, AppState>,
+    id: i64,
+) -> Result<(), String> {
+    db::staff_assignments::remove_one(&state.db, id).await
+}
+
+// ── Self-Pay Items CRUD ───────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn get_all_selfpay_items(state: tauri::State<'_, AppState>) -> Result<Vec<SelfPayItem>, String> {
+    db::selfpay_items::get_all(&state.db).await
+}
+
+#[tauri::command]
+pub async fn create_selfpay_item(
+    state: tauri::State<'_, AppState>,
+    item: SelfPayItem,
+) -> Result<SelfPayItem, String> {
+    db::selfpay_items::create(&state.db, &item).await
+}
+
+#[tauri::command]
+pub async fn update_selfpay_item(
+    state: tauri::State<'_, AppState>,
+    item: SelfPayItem,
+) -> Result<SelfPayItem, String> {
+    db::selfpay_items::update(&state.db, &item).await
+}
+
+#[tauri::command]
+pub async fn delete_selfpay_item(
+    state: tauri::State<'_, AppState>,
+    id: i64,
+) -> Result<(), String> {
+    db::selfpay_items::delete(&state.db, id).await
 }
 
 // ── Cloud Sync ────────────────────────────────────────────────────────────────

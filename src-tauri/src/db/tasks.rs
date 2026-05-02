@@ -25,12 +25,19 @@ fn map_row(r: &sqlx::sqlite::SqliteRow) -> SurgeryTask {
     let urgency_str: String = r.get("urgency");
     SurgeryTask {
         id:            r.get("id"),
+        seq_no:        r.get("seq_no"),
         patient_name:  r.get("patient_name"),
+        gender:        r.get("gender"),
+        age:           r.get("age"),
         chart_no:      r.get("chart_no"),
-        procedure:     r.get("procedure"),
-        diagnosis:     r.get("diagnosis"),
-        vs_note:       r.get("vs_note"),
+        bed_no:        r.get("bed_no"),
         dept:          r.get("dept"),
+        diagnosis:     r.get("diagnosis"),
+        body_part:     r.get("body_part"),
+        procedure:     r.get("procedure"),
+        anesthesia:    r.get("anesthesia"),
+        surgeon:       r.get("surgeon"),
+        vs_note:       r.get("vs_note"),
         expected_room: r.get("expected_room"),
         urgency:       str_to_urgency(&urgency_str),
         scheduled_at:  r.get("scheduled_at"),
@@ -52,12 +59,13 @@ pub async fn create(pool: &SqlitePool, task: &SurgeryTask) -> Result<SurgeryTask
     let now = now_secs();
     let id = sqlx::query(
         "INSERT INTO surgery_tasks
-         (patient_name,chart_no,procedure,diagnosis,vs_note,dept,expected_room,urgency,scheduled_at,created_at,est_time_mins,status)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+         (seq_no,patient_name,gender,age,chart_no,bed_no,dept,diagnosis,body_part,procedure,anesthesia,surgeon,vs_note,expected_room,urgency,scheduled_at,created_at,est_time_mins,status)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
     )
-    .bind(&task.patient_name).bind(&task.chart_no).bind(&task.procedure)
-    .bind(&task.diagnosis).bind(&task.vs_note).bind(&task.dept)
-    .bind(&task.expected_room).bind(urgency_str(&task.urgency))
+    .bind(task.seq_no).bind(&task.patient_name).bind(&task.gender).bind(task.age)
+    .bind(&task.chart_no).bind(&task.bed_no).bind(&task.dept).bind(&task.diagnosis)
+    .bind(&task.body_part).bind(&task.procedure).bind(&task.anesthesia).bind(&task.surgeon)
+    .bind(&task.vs_note).bind(&task.expected_room).bind(urgency_str(&task.urgency))
     .bind(task.scheduled_at).bind(now)
     .bind(task.est_time_mins as i64).bind(&task.status)
     .execute(pool).await.map_err(|e| e.to_string())?
@@ -69,13 +77,15 @@ pub async fn create(pool: &SqlitePool, task: &SurgeryTask) -> Result<SurgeryTask
 pub async fn update(pool: &SqlitePool, task: &SurgeryTask) -> Result<SurgeryTask, String> {
     sqlx::query(
         "UPDATE surgery_tasks SET
-         patient_name=?,chart_no=?,procedure=?,diagnosis=?,vs_note=?,dept=?,
-         expected_room=?,urgency=?,scheduled_at=?,est_time_mins=?,status=?
+         seq_no=?,patient_name=?,gender=?,age=?,chart_no=?,bed_no=?,dept=?,diagnosis=?,body_part=?,
+         procedure=?,anesthesia=?,surgeon=?,vs_note=?,expected_room=?,urgency=?,
+         scheduled_at=?,est_time_mins=?,status=?
          WHERE id=?",
     )
-    .bind(&task.patient_name).bind(&task.chart_no).bind(&task.procedure)
-    .bind(&task.diagnosis).bind(&task.vs_note).bind(&task.dept)
-    .bind(&task.expected_room).bind(urgency_str(&task.urgency))
+    .bind(task.seq_no).bind(&task.patient_name).bind(&task.gender).bind(task.age)
+    .bind(&task.chart_no).bind(&task.bed_no).bind(&task.dept).bind(&task.diagnosis)
+    .bind(&task.body_part).bind(&task.procedure).bind(&task.anesthesia).bind(&task.surgeon)
+    .bind(&task.vs_note).bind(&task.expected_room).bind(urgency_str(&task.urgency))
     .bind(task.scheduled_at).bind(task.est_time_mins as i64)
     .bind(&task.status).bind(task.id)
     .execute(pool).await.map_err(|e| e.to_string())?;
@@ -97,12 +107,36 @@ pub async fn replace_all(pool: &SqlitePool, tasks: &[SurgeryTask]) -> Result<(),
     for t in tasks {
         sqlx::query(
             "INSERT INTO surgery_tasks
-             (id,patient_name,chart_no,procedure,diagnosis,vs_note,dept,expected_room,urgency,scheduled_at,created_at,est_time_mins,status)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+             (id,seq_no,patient_name,gender,age,chart_no,bed_no,dept,diagnosis,body_part,procedure,anesthesia,surgeon,vs_note,expected_room,urgency,scheduled_at,created_at,est_time_mins,status)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         )
-        .bind(t.id).bind(&t.patient_name).bind(&t.chart_no).bind(&t.procedure)
-        .bind(&t.diagnosis).bind(&t.vs_note).bind(&t.dept).bind(&t.expected_room)
-        .bind(urgency_str(&t.urgency)).bind(t.scheduled_at).bind(t.created_at)
+        .bind(t.id).bind(t.seq_no).bind(&t.patient_name).bind(&t.gender).bind(t.age)
+        .bind(&t.chart_no).bind(&t.bed_no).bind(&t.dept).bind(&t.diagnosis)
+        .bind(&t.body_part).bind(&t.procedure).bind(&t.anesthesia).bind(&t.surgeon)
+        .bind(&t.vs_note).bind(&t.expected_room).bind(urgency_str(&t.urgency))
+        .bind(t.scheduled_at).bind(t.created_at)
+        .bind(t.est_time_mins as i64).bind(&t.status)
+        .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+    }
+    tx.commit().await.map_err(|e| e.to_string())
+}
+
+pub async fn batch_create(pool: &SqlitePool, tasks: &[SurgeryTask]) -> Result<(), String> {
+    if tasks.is_empty() { return Ok(()); }
+    let now = now_secs();
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    for t in tasks {
+        sqlx::query(
+            "INSERT INTO surgery_tasks
+             (seq_no,patient_name,gender,age,chart_no,bed_no,dept,diagnosis,body_part,procedure,
+              anesthesia,surgeon,vs_note,expected_room,urgency,scheduled_at,created_at,est_time_mins,status)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        )
+        .bind(t.seq_no).bind(&t.patient_name).bind(&t.gender).bind(t.age)
+        .bind(&t.chart_no).bind(&t.bed_no).bind(&t.dept).bind(&t.diagnosis)
+        .bind(&t.body_part).bind(&t.procedure).bind(&t.anesthesia).bind(&t.surgeon)
+        .bind(&t.vs_note).bind(&t.expected_room).bind(urgency_str(&t.urgency))
+        .bind(t.scheduled_at).bind(now)
         .bind(t.est_time_mins as i64).bind(&t.status)
         .execute(&mut *tx).await.map_err(|e| e.to_string())?;
     }

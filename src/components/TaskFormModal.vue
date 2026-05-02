@@ -122,12 +122,19 @@ const URGENCY_OPTIONS = [
 ] as const;
 
 const form = reactive<Omit<SurgeryTask, "id" | "created_at">>({
+  seq_no: 0,
   patient_name: "",
+  gender: "",
+  age: 0,
   chart_no: "",
-  procedure: "",
-  diagnosis: "",
-  vs_note: "",
+  bed_no: "",
   dept: "",
+  diagnosis: "",
+  body_part: "",
+  procedure: "",
+  anesthesia: "",
+  surgeon: "",
+  vs_note: "",
   expected_room: "",
   urgency: "Trauma",
   scheduled_at: null,

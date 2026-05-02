@@ -34,6 +34,7 @@ pub fn run() {
             commands::create_task,
             commands::update_task,
             commands::delete_task,
+            commands::batch_create_tasks,
             // Staff CRUD
             commands::get_all_staff,
             commands::create_staff,
@@ -51,9 +52,23 @@ pub fn run() {
             // Room Shifts
             commands::get_room_shifts_by_date,
             commands::replace_room_shifts_by_month,
+            commands::replace_room_shifts_by_date,
+            // Staff Assignments
+            commands::get_staff_assignments_by_date,
+            commands::replace_staff_assignments_by_month,
+            commands::add_staff_assignment,
+            commands::remove_staff_assignment,
             // Settings
             commands::get_gas_url,
             commands::set_gas_url,
+            // Staff Roster
+            commands::get_staff_roster_by_date,
+            commands::replace_staff_roster_by_month,
+            // Self-Pay Items
+            commands::get_all_selfpay_items,
+            commands::create_selfpay_item,
+            commands::update_selfpay_item,
+            commands::delete_selfpay_item,
             // Sync
             commands::sync_push,
             commands::sync_pull,

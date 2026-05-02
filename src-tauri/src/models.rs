@@ -30,12 +30,19 @@ impl Default for UrgencyLevel {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SurgeryTask {
     pub id: i64,
+    pub seq_no: i32,
     pub patient_name: String,
+    pub gender: String,
+    pub age: i32,
     pub chart_no: String,
-    pub procedure: String,
-    pub diagnosis: String,
-    pub vs_note: String,
+    pub bed_no: String,
     pub dept: String,
+    pub diagnosis: String,
+    pub body_part: String,
+    pub procedure: String,
+    pub anesthesia: String,
+    pub surgeon: String,
+    pub vs_note: String,
     pub expected_room: String,
     pub urgency: UrgencyLevel,
     pub scheduled_at: Option<i64>,
@@ -78,6 +85,31 @@ pub struct RoomScheduleEntry {
     pub notes: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct StaffAssignment {
+    pub id: i64,
+    pub staff_name: String,
+    pub room_name: String,
+    pub date: String,   // "YYYY-MM-DD"
+    pub role: String,   // "SA" | "Scrub" | "Circ" | "R" | "VS"
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct StaffRosterEntry {
+    pub id: i64,
+    pub staff_name: String,
+    pub date: String,       // "YYYY-MM-DD"
+    pub shift_name: String, // e.g., "D", "N1", "OFF"
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ShiftDefinition {
+    pub name: String,        // e.g., "D"
+    pub start_time: String,  // "07:30"
+    pub end_time: String,    // "16:00"
+    pub is_on_call: bool,    // 是否為值班/二線
+}
+
 /// Per-department priority adjustment and preferred room list.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeptRule {
@@ -86,6 +118,8 @@ pub struct DeptRule {
     pub priority_bonus: i64,
     /// Rooms preferred by this dept (informational, used for room_bonus calculation).
     pub preferred_rooms: Vec<String>,
+    /// Tailwind-style color class (e.g., "bg-blue-800 text-blue-200")
+    pub color: String,
 }
 
 /// A task paired with its computed priority score and deadline status.
@@ -97,6 +131,14 @@ pub struct TaskWithScore {
     pub is_overdue: bool,
     /// 0–100 (capped). None for Normal urgency (no hard deadline).
     pub deadline_elapsed_pct: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SelfPayItem {
+    pub id: i64,
+    pub name: String,
+    pub price: i64,
+    pub notes: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

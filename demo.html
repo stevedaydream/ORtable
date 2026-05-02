@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart OR Triage - 智慧手術排程看板</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* 自定義滾動條 */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .timeline-container {
+            position: relative;
+            height: 1440px; /* 24小時 * 60px/小時 = 1440px */
+            background-size: 100% 60px;
+            background-image: linear-gradient(to bottom, #e2e8f0 1px, transparent 1px);
+        }
+        
+        .time-label {
+            position: absolute;
+            left: 0;
+            width: 60px;
+            text-align: right;
+            padding-right: 8px;
+            font-size: 0.75rem;
+            color: #64748b;
+            transform: translateY(-50%);
+        }
+
+        .patient-card-dragging {
+            opacity: 0.5;
+            transform: scale(0.95);
+        }
+
+        /* 隱藏原生拖拉的殘影(非必需，但提升體驗) */
+        .drop-zone {
+            transition: background-color 0.2s;
+        }
+        .drop-zone.drag-over {
+            background-color: rgba(59, 130, 246, 0.1);
+            border: 2px dashed #3b82f6;
+        }
+
+        /* 緊急程度標籤顏色 */
+        .urgency-trauma { border-left: 4px solid #ef4444; }
+        .urgency-l1 { border-left: 4px solid #f97316; }
+        .urgency-l2 { border-left: 4px solid #eab308; }
+        .urgency-l3 { border-left: 4px solid #3b82f6; }
+        .urgency-normal { border-left: 4px solid #22c55e; }
+    </style>
+</head>
+<body class="bg-slate-100 h-screen w-full flex overflow-hidden text-slate-800 font-sans">
+
+    <!-- 模態框 (Modal) - 病患詳細資訊 -->
+    <div id="patientModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+        <div class="bg-white rounded-xl shadow-2xl w-[600px] max-w-full p-6">
+            <div class="flex justify-between items-start mb-4">
+                <h2 class="text-xl font-bold text-slate-800" id="modalTitle">病患詳細資料</h2>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-red-500"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <div id="modalContent" class="space-y-3">
+                <!-- 內容由 JS 動態生成 -->
+            </div>
+            <div class="mt-6 flex justify-end">
+                <button onclick="closeModal()" class="px-4 py-2 bg-slate-200 text-slate-800 rounded hover:bg-slate-300 transition">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 左側選單 (Sidebar) -->
+    <aside class="w-64 bg-slate-900 text-white flex-shrink-0 flex flex-col shadow-xl z-20">
+        <div class="p-5 border-b border-slate-700">
+            <h1 class="text-xl font-bold tracking-wider flex items-center gap-2">
+                <i class="fas fa-heartbeat text-rose-500"></i> OR Triage
+            </h1>
+            <p class="text-xs text-slate-400 mt-1">智慧手術排程看板</p>
+        </div>
+        
+        <nav class="flex-1 p-4 flex flex-col gap-2">
+            <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">功能選單</div>
+            
+            <button class="w-full flex items-center gap-3 px-4 py-3 bg-slate-800 rounded-lg hover:bg-slate-700 transition border border-slate-700 hover:border-slate-500 text-left">
+                <i class="fas fa-file-import text-blue-400"></i>
+                <span>科別使用清單匯入</span>
+            </button>
+            
+            <button onclick="importDailySurgeries()" class="w-full flex items-center gap-3 px-4 py-3 bg-slate-800 rounded-lg hover:bg-slate-700 transition border border-slate-700 hover:border-slate-500 text-left">
+                <i class="fas fa-list-check text-green-400"></i>
+                <span>每日手術清單匯入</span>
+            </button>
+
+            <button class="w-full flex items-center gap-3 px-4 py-3 bg-rose-600 rounded-lg hover:bg-rose-500 transition shadow-lg shadow-rose-900/50 text-left mt-4">
+                <i class="fas fa-plus-circle text-white"></i>
+                <span class="font-medium">建立急診病患</span>
+            </button>
+
+            <!-- 藍圖要求的二線與Extra機制按鈕 -->
+            <button onclick="toggleEmergencyOverride()" class="w-full flex items-center gap-3 px-4 py-3 bg-orange-600 rounded-lg hover:bg-orange-500 transition shadow-lg shadow-orange-900/50 text-left mt-2" id="btnEmergency">
+                <i class="fas fa-exclamation-triangle text-white"></i>
+                <span class="font-medium">一鍵啟動二線機制</span>
+            </button>
+
+            <button onclick="toggleExtraLine()" class="w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 rounded-lg hover:bg-indigo-500 transition shadow-lg shadow-indigo-900/50 text-left mt-2" id="btnExtra">
+                <i class="fas fa-moon text-white"></i>
+                <span class="font-medium">申請 Extra 線 (值班)</span>
+            </button>
+        </nav>
+    </aside>
+
+    <!-- 主視窗 (Main Area - 2:1) -->
+    <main class="flex-1 flex overflow-hidden">
+        
+        <!-- 區塊 2: 房間總覽 (2/3 寬度) -->
+        <section class="flex-[2] flex flex-col border-r border-slate-300 bg-white relative overflow-hidden">
+            
+            <!-- 房間標頭區 (固定在頂部) -->
+            <div class="flex-none bg-slate-100 border-b border-slate-300 shadow-sm z-10 flex" id="roomHeaders">
+                <div class="w-16 flex-shrink-0 border-r border-slate-200 flex items-end justify-center pb-2 text-xs font-bold text-slate-500">
+                    時間
+                </div>
+                <div class="flex-1 flex overflow-x-hidden" id="roomColumnsHeader">
+                    <!-- 房間標題由 JS 生成 -->
+                </div>
+            </div>
+
+            <!-- 時間軸與房間內容區 (可上下滾動) -->
+            <div class="flex-1 overflow-y-auto overflow-x-hidden relative" id="timelineBody" onscroll="syncScroll()">
+                <div class="timeline-container w-full flex">
+                    <!-- 時間刻度 -->
+                    <div class="w-16 flex-shrink-0 border-r border-slate-200 relative bg-white z-0" id="timeLabels">
+                        <!-- 時間標籤由 JS 生成 -->
+                    </div>
+                    
+                    <!-- 房間列 -->
+                    <div class="flex-1 flex" id="roomColumnsBody">
+                        <!-- 房間時段與拖放區由 JS 生成 -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 區塊 1: 待排定房間病患 (1/3 寬度) -->
+        <section class="flex-[1] bg-slate-50 flex flex-col h-full shadow-inner">
+            <div class="p-4 border-b border-slate-200 bg-white shadow-sm flex justify-between items-center z-10 flex-shrink-0">
+                <h2 class="text-lg font-bold text-slate-700"><i class="fas fa-procedures mr-2 text-blue-500"></i>待排定病患</h2>
+                <span class="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded-full" id="waitingCount">0</span>
+            </div>
+            
+            <!-- 今日上班成員區塊 -->
+            <div class="p-4 border-b border-slate-200 bg-slate-100 shadow-sm z-10 flex-shrink-0">
+                <div class="text-xs font-bold text-slate-600 mb-2 flex items-center gap-1">
+                    <i class="fas fa-user-md text-teal-600"></i>今日上班成員 
+                    <span class="text-[10px] text-slate-400 font-normal ml-1">(拖拉至房間標頭)</span>
+                </div>
+                <!-- 加入 ondragover 與 ondrop，讓人員可以被拖回來，並設定 min-h 確保空的時候可以感應 -->
+                <div class="flex flex-wrap gap-2 min-h-[30px] drop-zone" id="staffPool" ondragover="allowDrop(event)" ondrop="dropStaffBack(event)">
+                    <!-- 人員區塊由 JS 生成 -->
+                </div>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-3" id="waitingList" 
+                 ondragover="allowDrop(event)" ondrop="dropToWaitingList(event)">
+                <!-- 病患小卡由 JS 生成 -->
+                <div class="text-center text-slate-400 mt-10 text-sm" id="emptyState">
+                    請點擊左側「每日手術清單匯入」載入病患<br>
+                    <span class="text-xs mt-2 inline-block">已連結：20260430手術排程.pdf 資料</span>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // === 模擬資料 (Mock Data) 依據 PDF 與 CSV 結構設計 ===
+        const rooms = ['門診/局麻', 'OR5', 'OR6', 'OR7', '備用刀房(二線)', 'Extra房'];
+        
+        // 狀態旗標
+        let isEmergencyActive = false;
+        let isExtraActive = false;
+
+        // 科別顏色對應 (依據 CSV 出現的科別)
+        const deptColors = {
+            '一般外科': 'bg-green-50 border-green-200 text-green-800',
+            'GS': 'bg-green-50 border-green-200 text-green-800',
+            'CRS/GS': 'bg-green-100 border-green-300 text-green-900',
+            '骨科': 'bg-blue-50 border-blue-200 text-blue-800',
+            'ORTHO': 'bg-blue-50 border-blue-200 text-blue-800',
+            '泌尿科': 'bg-yellow-50 border-yellow-200 text-yellow-800',
+            'URO': 'bg-yellow-50 border-yellow-200 text-yellow-800',
+            '神經外科': 'bg-purple-50 border-purple-200 text-purple-800',
+            'NS': 'bg-purple-50 border-purple-200 text-purple-800',
+            '婦產科': 'bg-pink-50 border-pink-200 text-pink-800',
+            'GYN': 'bg-pink-50 border-pink-200 text-pink-800',
+            '整形外科': 'bg-rose-50 border-rose-200 text-rose-800',
+            'PS': 'bg-rose-50 border-rose-200 text-rose-800',
+            'ENT': 'bg-teal-50 border-teal-200 text-teal-800',
+            'OPH': 'bg-cyan-50 border-cyan-200 text-cyan-800',
+            'CVS': 'bg-red-50 border-red-200 text-red-800',
+            'DENT': 'bg-stone-50 border-stone-200 text-stone-800',
+            '空堂': 'bg-slate-50 border-slate-100 text-slate-400'
+        };
+
+        // 模擬房間時段設定 (依據 2026手術時段.csv 結構，AM: 0730-1230, PM: 1230-1600)
+        const roomShifts = {
+            '門診/局麻': [
+                { period: 'AM', dept: 'PS', start: 0, end: 300 },
+                { period: 'PM', dept: 'ENT', start: 300, end: 510 },
+                { period: '值班', dept: '空堂', start: 510, end: 1440 }
+            ],
+            'OR5': [
+                { period: 'AM', dept: 'GS', start: 0, end: 300 },
+                { period: 'PM', dept: 'GS', start: 300, end: 510 },
+                { period: '值班', dept: '空堂', start: 510, end: 1440 }
+            ],
+            'OR6': [
+                { period: 'AM', dept: 'ORTHO', start: 0, end: 300 },
+                { period: 'PM', dept: 'URO', start: 300, end: 510 },
+                { period: '值班', dept: '空堂', start: 510, end: 1440 }
+            ],
+            'OR7': [
+                { period: 'AM', dept: 'ENT', start: 0, end: 300 },
+                { period: 'PM', dept: 'NS', start: 300, end: 510 },
+                { period: '值班', dept: '空堂', start: 510, end: 1440 }
+            ],
+            '備用刀房(二線)': [
+                { period: '全日', dept: '空堂', start: 0, end: 1440, isBackup: true }
+            ],
+            'Extra房': [
+                { period: '值班 (1600-0730)', dept: '空堂', start: 510, end: 1440, isExtra: true }
+            ]
+        };
+
+        const staffList = [
+            { id: 's1', name: '王醫師', role: 'VS', type: 'doc' },
+            { id: 's2', name: '李醫師', role: 'R', type: 'doc' },
+            { id: 's3', name: '陳護理師', role: 'Scrub', type: 'nur' },
+            { id: 's4', name: '林護理師', role: 'Circ', type: 'nur' },
+            { id: 's5', name: '吳護理師', role: 'Scrub', type: 'nur', isOnCall: true }, // 二線待命
+            { id: 's6', name: '趙護理師', role: 'Circ', type: 'nur', isVolunteerExtra: true } // 可接 Extra
+        ];
+
+        // 依據 20260430手術排程.pdf 建構的真實欄位資料
+        let patientsData = [
+            { 
+                id: 'p1', roomReq: '05', seq: '1', 
+                name: '潘萬益', gender: '男', age: '57', 
+                dept: '一般外科', chartNo: '0006214852', bedNo: '91503', 
+                diag: 'rectal cancer', 
+                proc: '根治性直腸切除術(含骨盆腔淋巴腺切除術)', 
+                anesthesia: 'G', surgeon: '陳樞鴻', reqTime: '08:00', 
+                vsNote: '9A 0800到', 
+                estTime: 180, urgency: 'Level 1', status: 'waiting' // estTime與Urgency為模擬推估
+            },
+            { 
+                id: 'p2', roomReq: 'WT', seq: '3', 
+                name: '姚大衛', gender: '男', age: '69', 
+                dept: '整形外科', chartNo: '0704867325', bedNo: '90801', 
+                diag: 'Cellulitis of left lower limb', 
+                proc: '多層皮膚移植-25~100平方公分', 
+                anesthesia: 'E', surgeon: '郭宇正', reqTime: '08:30', 
+                vsNote: '需停藥72小時', 
+                estTime: 90, urgency: 'Level 2', status: 'waiting' 
+            },
+            { 
+                id: 'p3', roomReq: 'WT', seq: '4', 
+                name: '劉民樹', gender: '男', age: '55', 
+                dept: '一般外科', chartNo: '0701321968', bedNo: '門診', 
+                diag: 'mixed hemorrhoid', 
+                proc: '內外痔完全切除術', 
+                anesthesia: 'E', surgeon: '陳樞鴻', reqTime: '09:00', 
+                vsNote: '4/29未住', 
+                estTime: 60, urgency: 'Normal', status: 'waiting' 
+            },
+            { 
+                id: 'p4', roomReq: 'WT', seq: '5', 
+                name: '林宜瑾', gender: '女', age: '40', 
+                dept: '精神科', chartNo: '0704844737', bedNo: '85602', 
+                diag: 'Schizophrenia', 
+                proc: '靜脈或肌肉麻醉', 
+                anesthesia: 'IVG', surgeon: '王煥瑜', reqTime: '09:00', 
+                vsNote: '週四週六可能第一台比較不方便,謝謝!', 
+                estTime: 45, urgency: 'Normal', status: 'waiting' 
+            }
+        ];
+
+        // 拖拉狀態
+        let draggedItem = null;
+        let draggedType = null; // 'patient' or 'staff'
+
+        // === 初始化與渲染函式 ===
+        document.addEventListener('DOMContentLoaded', () => {
+            renderTimeLabels();
+            renderRooms();
+            renderStaffPool();
+        });
+
+        // 渲染 24 小時時間標籤 (07:30 開始)
+        function renderTimeLabels() {
+            const container = document.getElementById('timeLabels');
+            let html = '';
+            for (let hour = 0; hour < 24; hour++) {
+                // 計算實際時間，從 07 開始
+                let currentHour = (7 + hour) % 24;
+                let timeStr = `${currentHour.toString().padStart(2, '0')}:30`;
+                let topPos = hour * 60; // 1小時 = 60px
+                html += `<div class="time-label" style="top: ${topPos}px">${timeStr}</div>`;
+            }
+            container.innerHTML = html;
+        }
+
+        // 渲染房間標題與時間軸主體
+        function renderRooms() {
+            const headerContainer = document.getElementById('roomColumnsHeader');
+            const bodyContainer = document.getElementById('roomColumnsBody');
+            
+            let headerHtml = '';
+            let bodyHtml = '';
+
+            rooms.forEach((room, index) => {
+                let isBackup = room === '備用刀房(二線)';
+                let isExtra = room === 'Extra房';
+                let displayClass = (isBackup || isExtra) ? 'hidden' : '';
+                let colId = isBackup ? 'room-backup' : (isExtra ? 'room-extra' : `room-${index}`);
+                
+                let extraBadge = isExtra ? '<span class="ml-1 px-1 bg-indigo-500 text-white rounded text-[8px]">Extra Pay</span>' : '';
+                let backupBadge = isBackup ? '<span class="ml-1 px-1 bg-orange-500 text-white rounded text-[8px]">二線</span>' : '';
+
+                headerHtml += `
+                    <div id="header-${colId}" class="flex-1 min-w-[150px] border-r border-slate-200 flex flex-col transition-all duration-300 ${displayClass}">
+                        <div class="bg-slate-700 text-white text-center py-1 text-sm font-bold truncate flex justify-center items-center">${room} ${extraBadge}${backupBadge}</div>
+                        <div class="grid grid-cols-3 gap-[1px] bg-slate-300 flex-1 p-[1px]">
+                            <div class="bg-white flex flex-col items-center justify-start p-1 min-h-[50px] drop-zone staff-drop" data-room="${room}" data-role="scrub" ondragover="allowDrop(event)" ondrop="dropStaff(event)">
+                                <span class="text-[10px] text-slate-400 font-bold mb-1 w-full text-center border-b border-slate-100 pb-0.5 pointer-events-none">刷手</span>
+                            </div>
+                            <div class="bg-white flex flex-col items-center justify-start p-1 min-h-[50px] drop-zone staff-drop" data-room="${room}" data-role="circ" ondragover="allowDrop(event)" ondrop="dropStaff(event)">
+                                <span class="text-[10px] text-slate-400 font-bold mb-1 w-full text-center border-b border-slate-100 pb-0.5 pointer-events-none">流動</span>
+                            </div>
+                            <div class="bg-white flex flex-col items-center justify-start p-1 min-h-[50px] drop-zone staff-drop" data-room="${room}" data-role="asst" ondragover="allowDrop(event)" ondrop="dropStaff(event)">
+                                <span class="text-[10px] text-slate-400 font-bold mb-1 w-full text-center border-b border-slate-100 pb-0.5 pointer-events-none">助手</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // --- 內容區 (時間軸與時段顏色) ---
+                let shiftsHtml = '';
+                let shifts = roomShifts[room] || [
+                    { period: '全日', dept: '空堂', start: 0, end: 1440 }
+                ];
+
+                shifts.forEach(shift => {
+                    let colorClass = deptColors[shift.dept] || deptColors['空堂'];
+                    let height = shift.end - shift.start;
+                    shiftsHtml += `
+                        <div class="absolute w-full border-b ${colorClass} opacity-40 flex items-center justify-center" 
+                             style="top: ${shift.start}px; height: ${height}px;">
+                             <span class="text-xs font-bold tracking-widest">${shift.dept !== '空堂' ? shift.period + ' ' + shift.dept : ''}</span>
+                        </div>
+                    `;
+                });
+
+                bodyHtml += `
+                    <div id="body-${colId}" class="flex-1 min-w-[150px] border-r border-slate-200 relative drop-zone timeline-drop transition-all duration-300 ${displayClass}" 
+                         data-room="${room}" 
+                         ondragover="allowDrop(event)" 
+                         ondrop="dropPatient(event, this)">
+                        ${shiftsHtml}
+                        <!-- 放置於此房間的病患將附加在此 div 下 -->
+                        <div id="timeline-${room}" class="absolute inset-0 pointer-events-none"></div>
+                    </div>
+                `;
+            });
+
+            headerContainer.innerHTML = headerHtml;
+            bodyContainer.innerHTML = bodyHtml;
+        }
+
+        // 渲染待命人員
+        function renderStaffPool() {
+            const pool = document.getElementById('staffPool');
+            pool.innerHTML = staffList.map(staff => {
+                let badge = '';
+                let isDraggable = true;
+                let bgClass = 'cursor-move bg-slate-600 hover:bg-slate-500 text-white';
+
+                if (staff.isOnCall) {
+                    badge = '<span class="text-[8px] bg-orange-500 text-white px-1 rounded ml-1">二線</span>';
+                    isDraggable = isEmergencyActive;
+                    if (!isEmergencyActive) bgClass = 'cursor-not-allowed bg-slate-300 text-slate-500';
+                    else bgClass = 'cursor-move bg-slate-700 hover:bg-slate-600 text-white border border-orange-400';
+                }
+                if (staff.isVolunteerExtra) {
+                    badge = '<span class="text-[8px] bg-indigo-500 text-white px-1 rounded ml-1">Extra</span>';
+                    isDraggable = isExtraActive;
+                    if (!isExtraActive) bgClass = 'cursor-not-allowed bg-slate-300 text-slate-500';
+                    else bgClass = 'cursor-move bg-slate-700 hover:bg-slate-600 text-white border border-indigo-400';
+                }
+
+                return `
+                <div draggable="${isDraggable}" 
+                     id="${staff.id}" ondragstart="dragStart(event, 'staff')" 
+                     class="${bgClass} text-xs px-2 py-1 rounded shadow-sm transition flex items-center">
+                    ${staff.name} ${badge}
+                </div>
+                `;
+            }).join('');
+        }
+
+        // 模擬匯入清單
+        function importDailySurgeries() {
+            document.getElementById('emptyState').classList.add('hidden');
+            renderWaitingList();
+            updateWaitingCount();
+        }
+
+        // 渲染右側待排定清單
+        function renderWaitingList() {
+            const list = document.getElementById('waitingList');
+            // 清除現有的卡片 (保留 empty state 隱藏)
+            Array.from(list.children).forEach(child => {
+                if(child.id !== 'emptyState') child.remove();
+            });
+
+            patientsData.filter(p => p.status === 'waiting').forEach(p => {
+                list.appendChild(createPatientCard(p, false));
+            });
+        }
+
+        function updateWaitingCount() {
+            const count = patientsData.filter(p => p.status === 'waiting').length;
+            document.getElementById('waitingCount').innerText = count;
+        }
+
+        // 建立病患卡片 (更新為支援 PDF 真實欄位)
+        function createPatientCard(patient, inTimeline) {
+            const div = document.createElement('div');
+            div.id = patient.id;
+            div.draggable = true;
+            div.ondragstart = (e) => dragStart(e, 'patient');
+            div.ondragend = dragEnd;
+            div.onclick = (e) => { e.stopPropagation(); showModal(patient); };
+            
+            let urgencyClass = '';
+            if (patient.urgency === 'Trauma') urgencyClass = 'urgency-trauma';
+            else if (patient.urgency === 'Level 1') urgencyClass = 'urgency-l1';
+            else if (patient.urgency === 'Level 2') urgencyClass = 'urgency-l2';
+            else urgencyClass = 'urgency-normal';
+
+            // 處理標籤顯示 (預定房號/床號)
+            let roomBadge = patient.roomReq !== 'WT' ? `<span class="bg-blue-100 text-blue-700 px-1 rounded text-[10px] border border-blue-200">房:${patient.roomReq}</span>` : '';
+
+            if (!inTimeline) {
+                // --- 右側待排定清單小卡 ---
+                div.className = `bg-white p-3 rounded-lg shadow-sm border border-slate-200 cursor-move hover:shadow-md transition ${urgencyClass} relative group`;
+                div.innerHTML = `
+                    <div class="flex justify-between items-start mb-1">
+                        <div class="font-bold text-slate-800 flex items-center gap-1">
+                            ${patient.name} 
+                            <span class="text-[10px] text-slate-500 font-normal">(${patient.gender}/${patient.age})</span>
+                            ${roomBadge}
+                        </div>
+                        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 ${getUrgencyTextColor(patient.urgency)}">${patient.urgency}</span>
+                    </div>
+                    <div class="text-sm font-semibold text-blue-700 truncate" title="${patient.proc}">${patient.proc}</div>
+                    <div class="text-xs text-slate-500 flex justify-between mt-1 mb-2">
+                        <span><i class="fas fa-bed"></i> ${patient.bedNo}</span>
+                        <span><i class="fas fa-user-md"></i> ${patient.surgeon}</span>
+                    </div>
+                    <div class="flex justify-between items-center text-xs text-slate-400 bg-slate-50 p-1 rounded">
+                        <span><i class="far fa-clock"></i> 預計: ${patient.estTime}m</span>
+                        <span>申: ${patient.reqTime}</span>
+                    </div>
+                `;
+            } else {
+                // --- 時間軸長卡 (隨縱軸變長) ---
+                div.className = `absolute left-1 right-1 rounded shadow-md cursor-move border border-slate-300 bg-white overflow-hidden pointer-events-auto ${urgencyClass} transition-all duration-200 hover:shadow-lg hover:z-20`;
+                div.innerHTML = `
+                    <div class="p-1.5 h-full flex flex-col">
+                        <div class="flex justify-between items-center bg-slate-50 -m-1.5 p-1.5 border-b border-slate-200 mb-1">
+                            <span class="font-bold text-[11px] text-slate-800">${patient.name}</span>
+                            <span class="text-[9px] font-bold ${getUrgencyTextColor(patient.urgency)}">${patient.urgency}</span>
+                        </div>
+                        <div class="text-[11px] font-bold text-blue-700 leading-tight line-clamp-2">${patient.proc}</div>
+                        <div class="text-[10px] text-slate-500 mt-auto truncate"><i class="fas fa-user-md"></i> ${patient.surgeon} | ${patient.bedNo}</div>
+                    </div>
+                `;
+            }
+            return div;
+        }
+
+        function getUrgencyTextColor(u) {
+            if (u === 'Trauma') return 'text-red-600';
+            if (u === 'Level 1') return 'text-orange-600';
+            if (u === 'Level 2') return 'text-yellow-600';
+            return 'text-green-600';
+        }
+
+        // === Drag and Drop 邏輯 ===
+        function dragStart(e, type) {
+            draggedItem = e.target;
+            draggedType = type;
+            e.dataTransfer.setData('text/plain', e.target.id);
+            setTimeout(() => e.target.classList.add('patient-card-dragging'), 0);
+        }
+
+        function dragEnd(e) {
+            e.target.classList.remove('patient-card-dragging');
+            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            draggedItem = null;
+            draggedType = null;
+        }
+
+        function allowDrop(e) {
+            e.preventDefault();
+            const dropZone = e.target.closest('.drop-zone') || e.target.closest('#waitingList');
+            if (dropZone) {
+                // 簡易視覺反饋
+                document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+                dropZone.classList.add('drag-over');
+            }
+        }
+
+        // 拖放人員到房間標頭
+        function dropStaff(e) {
+            e.preventDefault();
+            const dropZone = e.target.closest('.staff-drop');
+            if (dropZone) dropZone.classList.remove('drag-over');
+
+            if (draggedType === 'staff' && dropZone) {
+                dropZone.appendChild(draggedItem);
+                draggedItem.className = 'cursor-move bg-teal-100 text-teal-800 text-[10px] px-1 py-0.5 rounded font-bold w-full text-center truncate mb-1 shadow-sm border border-teal-200 hover:bg-teal-200';
+            }
+        }
+
+        function dropStaffBack(e) {
+            e.preventDefault();
+            const dropZone = e.target.closest('#staffPool');
+            if (dropZone) dropZone.classList.remove('drag-over');
+
+            if (draggedType === 'staff' && dropZone) {
+                dropZone.appendChild(draggedItem);
+                draggedItem.className = 'cursor-move bg-slate-600 text-white text-xs px-2 py-1 rounded shadow-sm hover:bg-slate-500';
+                updateStaffPoolStatus(); // 重新校正防呆顏色
+            }
+        }
+
+        // 拖放病患到時間軸
+        function dropPatient(e, timelineColumn) {
+            e.preventDefault();
+            timelineColumn.classList.remove('drag-over');
+
+            if (draggedType === 'patient') {
+                const patientId = e.dataTransfer.getData('text/plain');
+                const patient = patientsData.find(p => p.id === patientId);
+                
+                if (patient) {
+                    patient.status = 'scheduled';
+                    
+                    const oldEl = document.getElementById(patientId);
+                    let wasInWaitingList = false;
+                    if(oldEl) {
+                        wasInWaitingList = (oldEl.parentElement.id === 'waitingList');
+                        oldEl.remove(); 
+                    }
+
+                    const rect = timelineColumn.getBoundingClientRect();
+                    const y = e.clientY - rect.top + timelineColumn.scrollTop;
+                    const snappedY = Math.round(y / 5) * 5;
+
+                    const newCard = createPatientCard(patient, true);
+                    newCard.style.top = `${snappedY}px`;
+                    newCard.style.height = `${patient.estTime}px`;
+
+                    const roomName = timelineColumn.getAttribute('data-room');
+                    const targetContainer = document.getElementById(`timeline-${roomName}`);
+                    targetContainer.appendChild(newCard);
+
+                    if (wasInWaitingList) {
+                        updateWaitingCount();
+                    }
+                }
+            }
+        }
+
+        // 拖回待排定清單
+        function dropToWaitingList(e) {
+            e.preventDefault();
+            const list = document.getElementById('waitingList');
+            list.classList.remove('drag-over');
+
+            if (draggedType === 'patient') {
+                const patientId = e.dataTransfer.getData('text/plain');
+                const patient = patientsData.find(p => p.id === patientId);
+                
+                if (patient && patient.status !== 'waiting') {
+                    patient.status = 'waiting';
+                    const oldEl = document.getElementById(patientId);
+                    if(oldEl) oldEl.remove();
+                    
+                    list.appendChild(createPatientCard(patient, false));
+                    updateWaitingCount();
+                }
+            }
+        }
+
+        // === Modal 邏輯 (更新為 PDF 真實欄位) ===
+        function showModal(patient) {
+            document.getElementById('patientModal').classList.remove('hidden');
+            const content = document.getElementById('modalContent');
+            content.innerHTML = `
+                <div class="grid grid-cols-3 gap-4">
+                    <div class="bg-slate-50 p-3 rounded border border-slate-200 col-span-2">
+                        <div class="text-xs text-slate-500 mb-1">病患姓名 / 性別年齡 / 病歷號</div>
+                        <div class="font-bold text-lg">${patient.name} <span class="text-sm font-normal text-slate-600">(${patient.gender} ${patient.age}歲) | ${patient.chartNo}</span></div>
+                    </div>
+                    <div class="bg-slate-50 p-3 rounded border border-slate-200">
+                        <div class="text-xs text-slate-500 mb-1">序號 / 預定房號</div>
+                        <div class="font-bold text-lg text-slate-800">序 ${patient.seq} <span class="text-sm font-normal text-slate-500">| 房 ${patient.roomReq}</span></div>
+                    </div>
+
+                    <div class="bg-slate-50 p-3 rounded border border-slate-200">
+                        <div class="text-xs text-slate-500 mb-1">科別</div>
+                        <div class="font-bold text-slate-800">${patient.dept}</div>
+                    </div>
+                    <div class="bg-slate-50 p-3 rounded border border-slate-200">
+                        <div class="text-xs text-slate-500 mb-1">主治醫師</div>
+                        <div class="font-bold text-slate-800">${patient.surgeon}</div>
+                    </div>
+                    <div class="bg-slate-50 p-3 rounded border border-slate-200">
+                        <div class="text-xs text-slate-500 mb-1">床號</div>
+                        <div class="font-bold text-slate-800">${patient.bedNo}</div>
+                    </div>
+
+                    <div class="col-span-3 bg-slate-50 p-3 rounded border border-slate-200">
+                        <div class="text-xs text-slate-500 mb-1">診斷名稱 (Diagnosis)</div>
+                        <div class="font-medium text-slate-800">${patient.diag}</div>
+                    </div>
+                    
+                    <div class="col-span-3 bg-slate-50 p-3 rounded border border-slate-200">
+                        <div class="text-xs text-slate-500 mb-1">手術式 (Procedure)</div>
+                        <div class="font-bold text-blue-700">${patient.proc}</div>
+                    </div>
+
+                    <div class="bg-slate-50 p-3 rounded border border-slate-200">
+                        <div class="text-xs text-slate-500 mb-1">麻醉方式</div>
+                        <div class="font-bold text-slate-800">${patient.anesthesia}</div>
+                    </div>
+                    <div class="bg-slate-50 p-3 rounded border border-slate-200">
+                        <div class="text-xs text-slate-500 mb-1">申請時間</div>
+                        <div class="font-bold text-slate-800">${patient.reqTime}</div>
+                    </div>
+                    <div class="bg-slate-50 p-3 rounded border border-slate-200">
+                        <div class="text-xs text-slate-500 mb-1">預估時間 (系統推估)</div>
+                        <div class="font-bold text-slate-800">${patient.estTime} 分鐘</div>
+                    </div>
+
+                    <div class="col-span-3 bg-amber-50 p-3 rounded border border-amber-200">
+                        <div class="text-xs text-amber-700 mb-1"><i class="fas fa-exclamation-circle"></i> VS Note / 備註</div>
+                        <div class="font-medium text-slate-800">${patient.vsNote}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function closeModal() {
+            document.getElementById('patientModal').classList.add('hidden');
+        }
+
+        function toggleEmergencyOverride() {
+            isEmergencyActive = !isEmergencyActive;
+            const btn = document.getElementById('btnEmergency');
+            const headerCol = document.getElementById('header-room-backup');
+            const bodyCol = document.getElementById('body-room-backup');
+
+            if (isEmergencyActive) {
+                btn.classList.replace('bg-orange-600', 'bg-red-700');
+                btn.innerHTML = `<i class="fas fa-exclamation-triangle text-white animate-pulse"></i><span class="font-bold text-white shadow-sm">二線機制已啟動</span>`;
+                headerCol.classList.remove('hidden');
+                bodyCol.classList.remove('hidden');
+            } else {
+                btn.classList.replace('bg-red-700', 'bg-orange-600');
+                btn.innerHTML = `<i class="fas fa-exclamation-triangle text-white"></i><span class="font-medium text-white">一鍵啟動二線機制</span>`;
+                headerCol.classList.add('hidden');
+                bodyCol.classList.add('hidden');
+            }
+            updateStaffPoolStatus();
+        }
+
+        function toggleExtraLine() {
+            isExtraActive = !isExtraActive;
+            const btn = document.getElementById('btnExtra');
+            const headerCol = document.getElementById('header-room-extra');
+            const bodyCol = document.getElementById('body-room-extra');
+
+            if (isExtraActive) {
+                btn.classList.replace('bg-indigo-600', 'bg-indigo-800');
+                btn.innerHTML = `<i class="fas fa-moon text-white animate-pulse"></i><span class="font-bold text-white shadow-sm">Extra 線已開啟</span>`;
+                headerCol.classList.remove('hidden');
+                bodyCol.classList.remove('hidden');
+            } else {
+                btn.classList.replace('bg-indigo-800', 'bg-indigo-600');
+                btn.innerHTML = `<i class="fas fa-moon text-white"></i><span class="font-medium text-white">申請 Extra 線 (值班)</span>`;
+                headerCol.classList.add('hidden');
+                bodyCol.classList.add('hidden');
+            }
+            updateStaffPoolStatus();
+        }
+
+        function updateStaffPoolStatus() {
+            staffList.forEach(staff => {
+                const el = document.getElementById(staff.id);
+                if (el && el.parentElement.id === 'staffPool') {
+                    if (staff.isOnCall) {
+                        el.draggable = isEmergencyActive;
+                        el.className = isEmergencyActive 
+                            ? 'cursor-move bg-slate-700 hover:bg-slate-600 text-white text-xs px-2 py-1 rounded shadow-sm transition flex items-center border border-orange-400'
+                            : 'cursor-not-allowed bg-slate-300 text-slate-500 text-xs px-2 py-1 rounded shadow-sm transition flex items-center';
+                    }
+                    if (staff.isVolunteerExtra) {
+                        el.draggable = isExtraActive;
+                        el.className = isExtraActive 
+                            ? 'cursor-move bg-slate-700 hover:bg-slate-600 text-white text-xs px-2 py-1 rounded shadow-sm transition flex items-center border border-indigo-400'
+                            : 'cursor-not-allowed bg-slate-300 text-slate-500 text-xs px-2 py-1 rounded shadow-sm transition flex items-center';
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>

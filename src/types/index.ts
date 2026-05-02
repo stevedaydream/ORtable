@@ -1,9 +1,28 @@
 export type UrgencyLevel = "Trauma" | "Level1" | "Level2" | "Level3" | "Normal";
-export type StaffRole = "R" | "Scrub" | "Circ" | "VS";
+export type TaskStatus = "waiting" | "scheduled" | "called" | "in_surgery" | "recovery";
+
+export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
+  waiting:    "待排",
+  scheduled:  "已排程",
+  called:     "已叫刀",
+  in_surgery: "手術中",
+  recovery:   "恢復室",
+};
+
+export const TASK_STATUS_COLORS: Record<TaskStatus, string> = {
+  waiting:    "bg-gray-700 text-gray-300",
+  scheduled:  "bg-blue-800 text-blue-200",
+  called:     "bg-amber-800 text-amber-200",
+  in_surgery: "bg-green-800 text-green-200",
+  recovery:   "bg-purple-800 text-purple-200",
+};
+export type StaffRole = "R" | "Scrub" | "Circ" | "VS" | "SA";
 export type StaffType = "doc" | "nur";
-export type StaffCategory = "sa" | "or_nurse" | "intern" | "cross_train";
+export type StaffCategory = "vs" | "r" | "sa" | "or_nurse" | "intern" | "cross_train";
 
 export const STAFF_CATEGORY_LABELS: Record<StaffCategory, string> = {
+  vs:          "主治醫師",
+  r:           "住院醫師",
   sa:          "專責護理師",
   or_nurse:    "開刀房護理師",
   intern:      "實習生",
@@ -12,12 +31,19 @@ export const STAFF_CATEGORY_LABELS: Record<StaffCategory, string> = {
 
 export interface SurgeryTask {
   id: number;
+  seq_no: number;
   patient_name: string;
+  gender: string;
+  age: number;
   chart_no: string;
-  procedure: string;
-  diagnosis: string;
-  vs_note: string;
+  bed_no: string;
   dept: string;
+  diagnosis: string;
+  body_part: string;
+  procedure: string;
+  anesthesia: string;
+  surgeon: string;
+  vs_note: string;
   expected_room: string;
   urgency: UrgencyLevel;
   scheduled_at: number | null;
@@ -46,6 +72,28 @@ export interface Room {
   is_backup: boolean;
 }
 
+export interface StaffAssignment {
+  id: number;
+  staff_name: string;
+  room_name: string;
+  date: string;   // "YYYY-MM-DD"
+  role: string;   // "SA" | "Scrub" | "Circ" | "R" | "VS"
+}
+
+export interface StaffRosterEntry {
+  id: number;
+  staff_name: string;
+  date: string;
+  shift_name: string;
+}
+
+export interface ShiftDefinition {
+  name: string;
+  start_time: string;
+  end_time: string;
+  is_on_call: boolean;
+}
+
 export interface RoomScheduleEntry {
   id: number;
   room_name: string;
@@ -60,6 +108,7 @@ export interface DeptRule {
   dept: string;
   priority_bonus: number;
   preferred_rooms: string[];
+  color: string;
 }
 
 export interface TaskWithScore {
@@ -78,6 +127,13 @@ export interface StaffComplianceResult {
   staff_id: number;
   allowed: boolean;
   reason: string | null;
+}
+
+export interface SelfPayItem {
+  id: number;
+  name: string;
+  price: number;
+  notes: string;
 }
 
 export interface SyncTimestamps {
