@@ -70,6 +70,13 @@ echo   Done.
 echo.
 echo [2/4] Git commit...
 git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml
+git add release.bat gas/.clasp.json 2>nul
+git diff --cached --quiet
+if not errorlevel 1 (
+    echo ERROR: No staged changes - version replacement may have failed
+    echo        Check that current version "%CURRENT_VER%" exists in all 3 files
+    pause & goto MENU
+)
 git commit -m "chore: bump version to %NEW_VER%"
 if errorlevel 1 ( echo ERROR: git commit failed & pause & goto MENU )
 
