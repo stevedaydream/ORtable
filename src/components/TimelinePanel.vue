@@ -299,7 +299,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted, reactive } from "vue";
 import type { Room, RoomScheduleEntry, StaffAssignment, SurgeryTask } from "../types";
 import { useRoomsStore } from "../stores/rooms";
 import { useTasksStore } from "../stores/tasks";
