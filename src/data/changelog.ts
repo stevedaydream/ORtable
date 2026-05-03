@@ -6,6 +6,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.1.1",
+    date: "2026-05-03",
+    changes: [
+      "feat: add room recommendation functionality and related types",
+      "feat: enable creation of updater artifacts in bundle configuration",
+      "feat: implement update modal and changelog functionality, enhance updater logic",
+      "feat: add release script for version management and GAS deployment",
+      "feat: update build workflow to generate changelog and modify release body, update spreadsheet ID, enhance self-pay item functionality, and adjust CSS zoom level",
+      "feat: add PatientListPanel, PendingQueuePanel, SelfPayPickerModal, StaffPoolPanel components",
+      "base",
+    ],
+  },
+  {
     version: "0.1.0",
     date: "2026-05-03",
     changes: [
