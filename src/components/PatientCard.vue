@@ -77,6 +77,7 @@
             <span class="text-[9px] text-gray-400">({{ task.bed_no }})</span>
           </div>
           <div class="flex items-center gap-0.5 shrink-0">
+            <span v-if="task.linked_task_id" class="text-[8px] px-1 rounded bg-teal-800 text-teal-200" title="兩科合刀">🔗</span>
             <span v-if="task.status === 'called'"     class="text-[8px] font-bold px-1 rounded bg-amber-700 text-amber-100">叫</span>
             <span v-if="task.status === 'in_surgery'" class="text-[8px] font-bold px-1 rounded bg-green-700 text-green-100 animate-pulse">進</span>
             <span v-if="task.status === 'recovery'"   class="text-[8px] font-bold px-1 rounded bg-purple-700 text-purple-100">完</span>

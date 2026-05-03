@@ -138,6 +138,7 @@ async fn migrate(pool: &SqlitePool) -> Result<(), String> {
         "ALTER TABLE surgery_tasks ADD COLUMN body_part TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE surgery_tasks ADD COLUMN anesthesia TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE surgery_tasks ADD COLUMN surgeon TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE surgery_tasks ADD COLUMN linked_task_id INTEGER",
     ] {
         let _ = sqlx::query(stmt).execute(pool).await;
     }

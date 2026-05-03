@@ -76,7 +76,7 @@
               <span v-if="room.is_backup" class="text-[9px] text-orange-500 shrink-0">備用</span>
             </div>
             <!-- 第二行：今日人員名牌 -->
-            <div class="flex flex-wrap gap-0.5 px-1.5 pb-1 overflow-hidden" style="height: 36px;">
+            <div class="flex flex-wrap gap-0.5 px-1.5 overflow-hidden" style="height: 36px;">
               <span
                 v-for="a in assignmentsForRoom(room.name)" :key="a.id"
                 class="group inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] leading-tight whitespace-nowrap cursor-grab active:cursor-grabbing relative"
@@ -93,6 +93,24 @@
               <span v-if="assignmentsForRoom(room.name).length === 0" class="text-[9px] text-gray-700 leading-tight pt-0.5">
                 未排班
               </span>
+            </div>
+            <!-- 第三行：刀數摘要 -->
+            <div class="flex items-center gap-1 px-2 shrink-0" style="height: 24px; border-top: 1px solid rgba(75,85,99,0.3);">
+              <template v-if="roomSummary(room.name).active + roomSummary(room.name).scheduled + roomSummary(room.name).recovery > 0">
+                <template v-if="roomSummary(room.name).active > 0">
+                  <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse shrink-0"></span>
+                  <span class="text-[9px] text-green-300 mr-1">{{ roomSummary(room.name).active }}</span>
+                </template>
+                <template v-if="roomSummary(room.name).scheduled > 0">
+                  <span class="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0"></span>
+                  <span class="text-[9px] text-blue-300 mr-1">{{ roomSummary(room.name).scheduled }}</span>
+                </template>
+                <template v-if="roomSummary(room.name).recovery > 0">
+                  <span class="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0"></span>
+                  <span class="text-[9px] text-purple-300">{{ roomSummary(room.name).recovery }}</span>
+                </template>
+              </template>
+              <span v-else class="text-[9px] text-gray-700">空刀</span>
             </div>
             <!-- 拖曳時 header overlay（確保 header 區域也可接受 drop） -->
             <div
@@ -281,7 +299,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, reactive } from "vue";
+import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import type { Room, RoomScheduleEntry, StaffAssignment, SurgeryTask } from "../types";
 import { useRoomsStore } from "../stores/rooms";
 import { useTasksStore } from "../stores/tasks";
@@ -296,12 +314,14 @@ import SelfPayPickerModal from "./SelfPayPickerModal.vue";
 const detailTaskId = ref<number | null>(null);
 const selfPayTaskId = ref<number | null>(null);
 
+const emit = defineEmits<{ "date-changed": [date: string] }>();
+
 // ── 常數 ──────────────────────────────────────────────────────────────────────
 const PX_PER_HOUR = 60;
 const START_HOUR  = 7.5;
 const TOTAL_HOURS = 24;
 const TOTAL_PX    = TOTAL_HOURS * PX_PER_HOUR;
-const HEADER_H    = 68;
+const HEADER_H    = 92;
 
 const HOUR_LABELS = Array.from({ length: TOTAL_HOURS + 1 }, (_, i) => {
   const totalMins = Math.round(START_HOUR * 60) + i * 60;
@@ -394,8 +414,18 @@ function jumpToToday() {
 }
 
 async function onDateChange() {
+  emit("date-changed", todayStr.value);
   await reload();
   if (isToday.value) scrollToNow();
+}
+
+function roomSummary(roomName: string): { scheduled: number; active: number; recovery: number } {
+  const tasks = scheduledTasksForRoom(roomName);
+  return {
+    scheduled: tasks.filter(t => t.status === "scheduled").length,
+    active:    tasks.filter(t => t.status === "in_surgery" || t.status === "called").length,
+    recovery:  tasks.filter(t => t.status === "recovery").length,
+  };
 }
 
 const dayStart = computed(() => {
@@ -504,19 +534,27 @@ function onDrop(e: DragEvent, roomName: string) {
     if (data.type === "staff" && data.name) {
       dropState.value = { staffName: data.name, roomName, role: "Circ" };
     } else if (data.type === "task" && data.id != null) {
-      assignTaskToRoom(data.id, roomName);
+      assignTaskToRoom(data.id, roomName, e.clientY);
     }
   } catch {
     console.error("[Timeline] drop 資料解析失敗");
   }
 }
 
-async function assignTaskToRoom(taskId: number, roomName: string) {
+function dropYToTime(clientY: number): number {
+  const container = scrollEl.value;
+  if (!container) return Math.floor(Date.now() / 1000);
+  const rect = container.getBoundingClientRect();
+  const yInContent = (clientY - rect.top) + container.scrollTop - HEADER_H;
+  const hoursOffset = Math.max(0, yInContent) / PX_PER_HOUR;
+  return dayStart.value + Math.round(hoursOffset * 3600);
+}
+
+async function assignTaskToRoom(taskId: number, roomName: string, clientY?: number) {
   const task = tasksStore.tasks.find(t => t.id === taskId);
   if (!task) return;
   try {
-    // 簡單模擬排程時間：如果是拖進來的，可以根據目前位置計算，或暫時設為 now
-    const scheduled_at = Math.floor(Date.now() / 1000);
+    const scheduled_at = clientY != null ? dropYToTime(clientY) : Math.floor(Date.now() / 1000);
     await tasksStore.edit({ ...task, expected_room: roomName, status: 'scheduled', scheduled_at });
   } catch (e) {
     console.error("[Timeline] 指派病患失敗:", e);
@@ -612,6 +650,7 @@ async function setTaskStatus(newStatus: string) {
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 onMounted(async () => {
   updateDate();
+  emit("date-changed", todayStr.value);
   await roomsStore.load();
   await reload();
   updateNow();

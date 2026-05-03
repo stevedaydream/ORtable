@@ -73,6 +73,8 @@ pub fn run() {
             commands::sync_push,
             commands::sync_pull,
             commands::get_sync_timestamps,
+            // Room Recommendation
+            commands::get_room_recommendation,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

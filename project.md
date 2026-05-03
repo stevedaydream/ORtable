@@ -336,11 +336,12 @@ src/
     ImportModal.vue          # CSV 病患清單匯入（拖放 + FileReader + 中英文欄名映射）
     ExtraLineModal.vue       # Extra 線申請（即時 batch_check_extra_compliance）
     SettingsModal.vue        # 設定（4 分頁：房間管理 / 人員管理 / 科別管理 / 雲端設定）
-    TimelinePanel.vue        # 房間總覽時間軸（07:30-07:30，60px/hr，科別色塊，現在線）
+    TimelinePanel.vue        # 房間總覽時間軸（07:30-07:30，60px/hr，科別色塊，現在線，drop Y→時間）
     StaffPoolPanel.vue       # 可分配人員面板（依類別分群，拖拉/右鍵指派）
-    PendingQueuePanel.vue    # 待排定病患卡片（waiting 狀態列表）
-    PatientCard.vue          # 統一病患卡片（queue / timeline 兩種模式）
+    PendingQueuePanel.vue    # 待排定病患卡片（waiting 狀態列表，selectedDate prop 篩選）
+    PatientCard.vue          # 統一病患卡片（queue / timeline 兩種模式，🔗 linked_task_id badge）
     ContextMenu.vue          # 可重用浮動右鍵選單（Teleport to body）
+    QuickAssignModal.vue     # 快速派房精靈（四層選擇 + RoomRecommendation 評分列表）
   composables/
     useLogger.ts             # singleton logger（攔截 console.error/warn, fetch, onerror）
     useDatabase.ts           # invoke wrappers：useTasksDb/useStaffDb/useRoomsDb/useRoomShiftsDb/
@@ -361,7 +362,7 @@ src/
     main.css                 # Tailwind CSS v4 入口 + @layer components（form-label/form-input/btn-*）
 src-tauri/
   src/
-    lib.rs                   # Tauri builder：plugins + setup(block_on DB init) + invoke_handler(33 commands)
+    lib.rs                   # Tauri builder：plugins + setup(block_on DB init) + invoke_handler(39 commands)
     main.rs                  # 程式進入點
     models.rs                # 全部 Rust struct（含 StaffAssignment/StaffRosterEntry/ShiftDefinition）
     engine.rs                # Rule Engine：priority_score/sort_tasks/check_compliance（5 單元測試）
@@ -419,9 +420,52 @@ PatientListPanel.vue — 批量選取與刪除：
   slide-down 批量操作列（已選 N 筆 + 批量刪除按鈕）；
   單筆 / 批量共用確認 dialog；篩選條件變更自動清除選取。
 
+Phase 10: UX 優化 — 重複偵測、預排明日、快速派房、UI 改善 ✅ 完成
+
+P1 — 病歷號重複 / 兩科手術偵測（ImportModal）：
+  SurgeryTask 新增 linked_task_id: Option<i64>（Rust）/ number|null（TS），DB 以 ALTER TABLE 補欄位。
+  ImportModal 預覽表格新增「偵測」badge 欄：
+    「重複」（橘）= 相同病歷號 + 相同手術者；「兩科」（藍）= 不同手術者。
+  「兩科」匯入時自動於 vs_note 加註 [合刀: 術者姓名]。
+  匯入後呼叫 linkDualTasks() 自動設定雙向 linked_task_id。
+  PatientCard timeline 模式顯示 🔗 badge（teal）當 linked_task_id 存在。
+
+P2 — 預排明日手術：
+  ImportModal 頂部新增「匯入目標日期」選擇器（預設今日）。
+  CSV 匯入：若目標日非今日，scheduled_at 設為該日 07:30。
+  PDF 匯入：若目標日 ≠ PDF 日期，所有 scheduled_at 平移至目標日（保留時間）。
+  App.vue 新增 selectedDate ref，TimelinePanel @date-changed 事件同步更新。
+  PendingQueuePanel 新增 selectedDate prop，waitingTasks 依日期篩選：
+    scheduled_at=null → 歸今日；非 null → 依 dateOfTs() 比對。
+
+P3 — 快速派房精靈（QuickAssignModal）：
+  新增 QuickAssignModal.vue：四層選擇（緊急程度/科別/麻醉/時長）+ 推薦結果列表。
+  Rust 新增 get_room_recommendation command（5 DB 並行查詢 + 多維評分）：
+    dept_match +5000 / is_available +4000 / within_deadline +3000 / has_staff +1000 / is_backup -1000。
+  Sidebar 新增「快速派房」按鈕（violet）。
+  確認後 emit confirmed 帶預填資料，App.vue 開啟 TaskFormModal（prefill prop）。
+  TaskFormModal 新增 prefill prop 初始化 expected_room/urgency/dept/anesthesia/est_time_mins。
+  types/index.ts 新增 RoomRecommendation 型別。
+  useDatabase.ts 新增 useRoomRecommendationDb()。
+
+P4 — UX 小型改善：
+  P4-1：App.vue 啟動後若無任何任務，顯示右上角快速引導浮動卡（import/dept-room/settings）。
+  P4-4：TimelinePanel 房間標頭新增第三行摘要列，三色分類計數：
+    🟢（animate-pulse）進行中（called/in_surgery）/ 🔵 排程中（scheduled）/ 🟣 已完成（recovery）；
+    各類別為 0 時不顯示；全為 0 顯示「空刀」。
+  HEADER_H 由 68px 調整至 92px。
+
+Bug fixes（本 Phase）：
+  TimelinePanel drag-drop：assignTaskToRoom() 改從 drop event clientY 計算 scheduled_at，
+    不再固定設為 Date.now()。dropYToTime(clientY) = dayStart + (clientY−rect.top+scrollTop−HEADER_H)/PX_PER_HOUR×3600。
+  QuickAssignModal：confirm() 移除 emit("close")，避免 modal = "emergency" 被後續 close 覆蓋成 null。
+  useDatabase.ts：get_room_recommendation invoke 參數改為 estMins（camelCase），配合 Tauri v2 自動轉換規則。
+  QuickAssignModal 按鈕文字：urgency === "Normal" 時顯示「建立病人資料」，其餘顯示「建立急診單」。
+
 8. 已知問題 / 待辦
 
 - 初次使用需手動至「設定 → 人員管理」新增人員，才能使用可分配人員面板
 - PendingQueuePanel 完整的拖拉至 Timeline 排班尚待驗證
 - staff_roster XLSX 匯入的班別與勞基法防呆計算尚未整合（today_shift_start 仍為手動設定）
 - 房間月排班 XLSX 目前只解析樞紐表格式（週次/時段/星期），不支援其他版型
+- P4-2（匯入差異比對）與 P4-3（出勤快速確認）尚未實作（後者需先完成 staff_roster 班別整合）

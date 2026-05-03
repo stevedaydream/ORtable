@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { DeptRule, Room, RoomScheduleEntry, SelfPayItem, Staff, StaffAssignment, StaffRosterEntry, SurgeryTask } from "../types";
+import type { DeptRule, Room, RoomRecommendation, RoomScheduleEntry, SelfPayItem, Staff, StaffAssignment, StaffRosterEntry, SurgeryTask } from "../types";
 
 // ── Surgery Tasks ─────────────────────────────────────────────────────────────
 
@@ -85,6 +85,14 @@ export function useSelfPayDb() {
   const update = (item: SelfPayItem) => invoke<SelfPayItem>("update_selfpay_item", { item });
   const remove = (id: number) => invoke<void>("delete_selfpay_item", { id });
   return { getAll, create, update, remove };
+}
+
+// ── Room Recommendation ───────────────────────────────────────────────────────
+
+export function useRoomRecommendationDb() {
+  const get = (urgency: string, dept: string, estMins: number, date: string) =>
+    invoke<RoomRecommendation[]>("get_room_recommendation", { urgency, dept, estMins, date });
+  return { get };
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────

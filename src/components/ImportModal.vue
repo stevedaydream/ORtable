@@ -29,6 +29,20 @@
       <!-- Body -->
       <div class="flex-1 overflow-y-auto px-5 py-4 space-y-4">
 
+        <!-- ── Target Date (shared between tabs) ─────────────────────── -->
+        <div class="flex items-center gap-3 bg-gray-900/50 rounded-lg px-4 py-2.5">
+          <i class="fa-solid fa-calendar-day text-blue-400 text-xs"></i>
+          <span class="text-xs text-gray-400 shrink-0">匯入目標日期</span>
+          <input
+            type="date"
+            v-model="targetDate"
+            class="bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-xs text-blue-300 font-mono outline-none focus:border-blue-500 [color-scheme:dark]"
+          />
+          <span v-if="targetDate !== todayStr" class="text-[10px] text-amber-400">
+            <i class="fa-solid fa-circle-info mr-1"></i>排程至非今日
+          </span>
+        </div>
+
         <!-- ── CSV TAB ─────────────────────────────────────────────────── -->
         <template v-if="activeTab === 'csv'">
           <div
@@ -73,6 +87,7 @@
               <table class="w-full text-xs">
                 <thead class="bg-gray-900/60">
                   <tr>
+                    <th class="px-3 py-2 text-left text-gray-400 font-medium w-14">狀態</th>
                     <th class="px-3 py-2 text-left text-gray-400 font-medium">#</th>
                     <th class="px-3 py-2 text-left text-gray-400 font-medium">姓名</th>
                     <th class="px-3 py-2 text-left text-gray-400 font-medium">病歷號</th>
@@ -84,6 +99,10 @@
                 </thead>
                 <tbody class="divide-y divide-gray-700/50">
                   <tr v-for="(t, i) in csvParsed.slice(0, 10)" :key="i" class="hover:bg-gray-700/30">
+                    <td class="px-3 py-2">
+                      <span v-if="csvDupFlags[i] === 'dup'" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-800 text-orange-200">重複</span>
+                      <span v-else-if="csvDupFlags[i] === 'dual'" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-800 text-blue-200">兩科</span>
+                    </td>
                     <td class="px-3 py-2 text-gray-600">{{ i + 1 }}</td>
                     <td class="px-3 py-2 text-gray-200">{{ t.patient_name }}</td>
                     <td class="px-3 py-2 text-gray-400">{{ t.chart_no }}</td>
@@ -189,6 +208,7 @@
               <table class="w-full text-xs">
                 <thead class="bg-gray-900/60">
                   <tr>
+                    <th class="px-2 py-2 text-left text-gray-400 font-medium w-14">偵測</th>
                     <th class="px-3 py-2 text-left text-gray-400 font-medium w-10">房</th>
                     <th class="px-3 py-2 text-left text-gray-400 font-medium w-7">#</th>
                     <th class="px-3 py-2 text-left text-gray-400 font-medium">姓名</th>
@@ -201,11 +221,15 @@
                 </thead>
                 <tbody class="divide-y divide-gray-700/50">
                   <tr
-                    v-for="t in previewFiltered.slice(0, 40)"
+                    v-for="(t, ti) in previewFiltered.slice(0, 40)"
                     :key="t.seq_no + '-' + t.patient_name"
                     class="hover:bg-gray-700/20"
                     :class="t.status === 'waiting' ? 'opacity-70' : ''"
                   >
+                    <td class="px-2 py-1.5">
+                      <span v-if="pdfDupFlags[previewFilteredIdx(ti)] === 'dup'" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-800 text-orange-200">重複</span>
+                      <span v-else-if="pdfDupFlags[previewFilteredIdx(ti)] === 'dual'" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-800 text-blue-200">兩科</span>
+                    </td>
                     <td class="px-3 py-1.5 font-mono text-blue-300">
                       {{ t.expected_room || 'WT' }}
                     </td>
@@ -272,7 +296,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { useTasksStore } from "../stores/tasks";
 import { useTasksDb } from "../composables/useDatabase";
 import type { SurgeryTask, UrgencyLevel } from "../types";
@@ -295,6 +319,77 @@ function switchTab(id: TabId) {
   importResult.value = null;
 }
 
+// ── Target date (P2) ──────────────────────────────────────────────────────────
+function getTodayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+const todayStr = getTodayStr();
+const targetDate = ref<string>(todayStr);
+
+function dateToOrStartTs(dateStr: string): number {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return Math.floor(new Date(y, m - 1, d, 7, 30, 0).getTime() / 1000);
+}
+
+// ── Dup detection (P1) ────────────────────────────────────────────────────────
+type DupStatus = "dup" | "dual" | null;
+
+function computeDupFlags(tasks: Partial<SurgeryTask>[]): DupStatus[] {
+  const existing = tasksStore.tasks;
+  const flags: DupStatus[] = new Array(tasks.length).fill(null);
+  for (let i = 0; i < tasks.length; i++) {
+    const t = tasks[i];
+    if (!t.chart_no) continue;
+    const existingMatch = existing.find(e => e.chart_no === t.chart_no);
+    if (existingMatch) {
+      const newFlag: DupStatus = existingMatch.surgeon === t.surgeon ? "dup" : "dual";
+      if (!flags[i] || newFlag === "dual") flags[i] = newFlag;
+    }
+    for (let j = 0; j < tasks.length; j++) {
+      if (i === j) continue;
+      const other = tasks[j];
+      if (other.chart_no !== t.chart_no) continue;
+      const newFlag: DupStatus = other.surgeon === t.surgeon ? "dup" : "dual";
+      if (!flags[i] || newFlag === "dual") flags[i] = newFlag;
+    }
+  }
+  return flags;
+}
+
+function applyDualAnnotations(tasks: SurgeryTask[], flags: DupStatus[]): SurgeryTask[] {
+  return tasks.map((t, i) => {
+    if (flags[i] !== "dual") return t;
+    const batchPartner = tasks.find((o, j) => j !== i && o.chart_no === t.chart_no && o.surgeon !== t.surgeon);
+    const existPartner = !batchPartner ? tasksStore.tasks.find(e => e.chart_no === t.chart_no && e.surgeon !== t.surgeon) : undefined;
+    const partnerSurgeon = batchPartner?.surgeon || existPartner?.surgeon || "";
+    if (!partnerSurgeon) return t;
+    const note = t.vs_note ? `${t.vs_note} [合刀: ${partnerSurgeon}]` : `[合刀: ${partnerSurgeon}]`;
+    return { ...t, vs_note: note };
+  });
+}
+
+async function linkDualTasks() {
+  const byChart = new Map<string, SurgeryTask[]>();
+  for (const t of tasksStore.tasks) {
+    if (!t.chart_no) continue;
+    if (!byChart.has(t.chart_no)) byChart.set(t.chart_no, []);
+    byChart.get(t.chart_no)!.push(t);
+  }
+  for (const [, group] of byChart) {
+    if (group.length !== 2) continue;
+    const [a, b] = group;
+    if (a.surgeon === b.surgeon) continue;
+    if (a.linked_task_id || b.linked_task_id) continue;
+    try {
+      await tasksDb.update({ ...a, linked_task_id: b.id } as SurgeryTask);
+      await tasksDb.update({ ...b, linked_task_id: a.id } as SurgeryTask);
+    } catch (e) {
+      console.error("[ImportModal] 兩科連結失敗:", e);
+    }
+  }
+}
+
 // ── Shared ────────────────────────────────────────────────────────────────────
 const importing = ref(false);
 const importResult = ref<{ ok: boolean; message: string } | null>(null);
@@ -310,12 +405,15 @@ function urgencyColor(u?: string) {
   return m[u ?? "Normal"] ?? m.Normal;
 }
 
-// ── CSV logic (unchanged) ─────────────────────────────────────────────────────
+// ── CSV logic ─────────────────────────────────────────────────────────────────
 const csvInput = ref<HTMLInputElement>();
 const csvDragging = ref(false);
 const csvParsed = ref<Partial<SurgeryTask>[]>([]);
 const csvErrors = ref<string[]>([]);
+const csvDupFlags = ref<DupStatus[]>([]);
 const csvValid = computed(() => csvParsed.value.filter((t) => t.patient_name?.trim()));
+
+watch(csvParsed, (tasks) => { csvDupFlags.value = computeDupFlags(tasks); });
 
 const CSV_COLS = [
   { key: "patient_name", alias: "病患姓名" },
@@ -378,14 +476,18 @@ function processCsvText(text: string) {
     const obj: Record<string, string> = {};
     header.forEach((h, j) => { obj[h] = row[j] ?? ""; });
     if (!obj.patient_name) { csvErrors.value.push(`第 ${i + 2} 行：缺少病患姓名，略過`); return; }
+    const importTs = targetDate.value && targetDate.value !== todayStr
+      ? dateToOrStartTs(targetDate.value)
+      : null;
     csvParsed.value.push({
       id: 0, patient_name: obj.patient_name, chart_no: obj.chart_no ?? "",
       urgency: normalizeUrgency(obj.urgency ?? ""), dept: obj.dept ?? "",
       procedure: obj.procedure ?? "", diagnosis: obj.diagnosis ?? "",
       expected_room: obj.expected_room ?? "",
       est_time_mins: parseInt(obj.est_time_mins ?? "60") || 60,
-      vs_note: obj.vs_note ?? "", scheduled_at: null, created_at: now, status: "waiting",
+      vs_note: obj.vs_note ?? "", scheduled_at: importTs, created_at: now, status: "waiting",
       seq_no: 0, gender: "", age: 0, bed_no: "", body_part: "", anesthesia: "", surgeon: "",
+      linked_task_id: null,
     });
   });
 }
@@ -414,10 +516,13 @@ async function doCsvImport() {
   importing.value = true;
   let count = 0;
   try {
-    for (const t of csvValid.value) {
-      await tasksStore.add(t as SurgeryTask);
+    const annotated = applyDualAnnotations(csvValid.value as SurgeryTask[], csvDupFlags.value);
+    for (const t of annotated) {
+      await tasksStore.add(t);
       count++;
     }
+    await tasksStore.load();
+    await linkDualTasks();
     importResult.value = { ok: true, message: `✓ 成功匯入 ${count} 筆病患` };
     emit("imported", count);
   } catch (e) {
@@ -436,6 +541,7 @@ const pdfStep = ref<PdfStep>("drop");
 const pdfError = ref("");
 const pdfDate = ref("");
 const pdfTasks = ref<SurgeryTask[]>([]);
+const pdfDupFlags = ref<DupStatus[]>([]);
 const pdfPreviewFilter = ref<"all" | "scheduled" | "waiting">("all");
 
 const pdfScheduled = computed(() => pdfTasks.value.filter((t) => t.status === "scheduled"));
@@ -445,6 +551,24 @@ const previewFiltered = computed(() => {
   if (pdfPreviewFilter.value === "waiting") return pdfWaiting.value;
   return pdfTasks.value;
 });
+
+watch(pdfTasks, (tasks) => { pdfDupFlags.value = computeDupFlags(tasks); });
+
+function previewFilteredIdx(localIdx: number): number {
+  const t = previewFiltered.value[localIdx];
+  return pdfTasks.value.indexOf(t);
+}
+
+function shiftTasksToDate(tasks: SurgeryTask[], fromDate: string, toDate: string): SurgeryTask[] {
+  if (!fromDate || fromDate === toDate) return tasks;
+  const [fy, fm, fd] = fromDate.split("-").map(Number);
+  const [ty, tm, td] = toDate.split("-").map(Number);
+  const offsetSecs = Math.round((new Date(ty, tm - 1, td).getTime() - new Date(fy, fm - 1, fd).getTime()) / 1000);
+  return tasks.map(t => ({
+    ...t,
+    scheduled_at: t.scheduled_at !== null ? t.scheduled_at + offsetSecs : null,
+  }));
+}
 
 function fmtScheduledAt(ts: number | null): string {
   if (!ts) return "—";
@@ -469,8 +593,12 @@ function readPdfFile(file: File) {
       const buffer = e.target?.result as ArrayBuffer;
       const result = await parsePdfBuffer(buffer);
       pdfDate.value = result.date;
-      pdfTasks.value = result.tasks;
-      if (result.tasks.length === 0) throw new Error("未解析到任何病患資料，請確認 PDF 格式是否為手術紀錄表");
+      let tasks = result.tasks;
+      if (targetDate.value && targetDate.value !== result.date) {
+        tasks = shiftTasksToDate(tasks, result.date, targetDate.value);
+      }
+      pdfTasks.value = tasks;
+      if (tasks.length === 0) throw new Error("未解析到任何病患資料，請確認 PDF 格式是否為手術紀錄表");
       pdfStep.value = "preview";
     } catch (err) {
       pdfError.value = String(err);
@@ -491,8 +619,10 @@ function resetPdf() {
 async function doPdfImport() {
   importing.value = true;
   try {
-    await tasksDb.batchCreate(pdfTasks.value);
+    const annotated = applyDualAnnotations(pdfTasks.value, pdfDupFlags.value);
+    await tasksDb.batchCreate(annotated);
     await tasksStore.load();
+    await linkDualTasks();
     importResult.value = { ok: true, message: `✓ 成功匯入 ${pdfTasks.value.length} 筆（已排 ${pdfScheduled.value.length} / 待排 ${pdfWaiting.value.length}）` };
     emit("imported", pdfTasks.value.length);
   } catch (e) {
@@ -703,6 +833,7 @@ function rowToTask(cells: string[], date: string): SurgeryTask | null {
     created_at: 0,
     est_time_mins: 60,
     status: isWT ? "waiting" : "scheduled",
+    linked_task_id: null,
   };
 }
 </script>

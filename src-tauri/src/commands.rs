@@ -1,6 +1,6 @@
 use crate::{
     db, engine, sync,
-    models::{DeptRule, ExtraComplianceResult, Room, RoomScheduleEntry, SelfPayItem, Staff, StaffAssignment, StaffComplianceResult, StaffRosterEntry, SurgeryTask, TaskWithScore},
+    models::{DeptRule, ExtraComplianceResult, Room, RoomRecommendation, RoomScheduleEntry, SelfPayItem, Staff, StaffAssignment, StaffComplianceResult, StaffRosterEntry, SurgeryTask, TaskWithScore},
     state::AppState,
 };
 
@@ -289,6 +289,104 @@ pub async fn delete_selfpay_item(
     id: i64,
 ) -> Result<(), String> {
     db::selfpay_items::delete(&state.db, id).await
+}
+
+// ── Quick Room Recommendation ─────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn get_room_recommendation(
+    state: tauri::State<'_, AppState>,
+    urgency: String,
+    dept: String,
+    est_mins: i64,
+    date: String,
+) -> Result<Vec<RoomRecommendation>, String> {
+    let rooms       = db::rooms::get_all(&state.db).await?;
+    let tasks       = db::tasks::get_all(&state.db).await?;
+    let dept_rules  = db::dept_rules::get_all(&state.db).await?;
+    let shifts      = db::room_shifts::get_by_date(&state.db, &date).await?;
+    let assignments = db::staff_assignments::get_by_date(&state.db, &date).await?;
+
+    let now = now_secs();
+
+    let deadline_secs: Option<i64> = match urgency.as_str() {
+        "Trauma" => Some(30 * 60),
+        "Level1" => Some(2 * 3600),
+        "Level2" => Some(6 * 3600),
+        "Level3" => Some(24 * 3600),
+        _ => None,
+    };
+
+    let preferred_rooms: Vec<String> = dept_rules
+        .iter()
+        .find(|r| r.dept == dept)
+        .map(|r| r.preferred_rooms.clone())
+        .unwrap_or_default();
+
+    let mut results: Vec<RoomRecommendation> = rooms.iter().map(|room| {
+        let active_tasks: Vec<&SurgeryTask> = tasks.iter().filter(|t| {
+            t.expected_room == room.name &&
+            matches!(t.status.as_str(), "scheduled" | "called" | "in_surgery")
+        }).collect();
+
+        let currently_occupied = active_tasks.iter().any(|t| {
+            matches!(t.status.as_str(), "called" | "in_surgery")
+        });
+        let is_available = !currently_occupied;
+
+        let est_free_at = active_tasks.iter()
+            .filter_map(|t| t.scheduled_at.map(|sa| sa + (t.est_time_mins as i64) * 60))
+            .max()
+            .unwrap_or(now);
+        let wait_secs = (est_free_at - now).max(0);
+        let est_available_mins = wait_secs / 60;
+
+        let within_deadline = deadline_secs
+            .map(|d| wait_secs + est_mins * 60 <= d)
+            .unwrap_or(true);
+
+        let dept_match = preferred_rooms.contains(&room.name) ||
+            shifts.iter().any(|s| s.room_name == room.name && s.dept == dept);
+
+        let room_assignments: Vec<&StaffAssignment> = assignments.iter()
+            .filter(|a| a.room_name == room.name).collect();
+        let has_scrub = room_assignments.iter().any(|a| a.role == "Scrub");
+        let has_circ  = room_assignments.iter().any(|a| a.role == "Circ");
+        let has_staff = has_scrub && has_circ;
+
+        let mut score: i64 = 0;
+        if dept_match      { score += 5000; }
+        if is_available    { score += 4000; }
+        if within_deadline { score += 3000; }
+        if has_staff       { score += 1000; }
+        if room.is_backup  { score -= 1000; }
+
+        let reason = if is_available {
+            if dept_match { "空刀房 · 科別符合".to_string() }
+            else { "空刀房".to_string() }
+        } else if est_available_mins > 0 {
+            let h = est_available_mins / 60;
+            let m = est_available_mins % 60;
+            if h > 0 { format!("約 {}h{}m 後空出", h, m) }
+            else { format!("約 {}m 後空出", m) }
+        } else {
+            "忙碌中".to_string()
+        };
+
+        RoomRecommendation {
+            room_name: room.name.clone(),
+            score,
+            is_available,
+            dept_match,
+            has_staff,
+            within_deadline,
+            est_available_mins,
+            reason,
+        }
+    }).collect();
+
+    results.sort_by(|a, b| b.score.cmp(&a.score));
+    Ok(results)
 }
 
 // ── Cloud Sync ────────────────────────────────────────────────────────────────

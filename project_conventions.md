@@ -77,6 +77,16 @@ let url = format!("sqlite:{}?mode=rwc",
 - 錯誤回傳 `Result<T, String>`，用 `.map_err(|e| e.to_string())`
 - 所有 command 在 `commands.rs` 定義，在 `lib.rs` 的 `invoke_handler![]` 中註冊
 
+### ⚠️ JS invoke 參數命名（BF-010）
+Tauri v2 的轉換方向是 **Rust snake_case → JS camelCase**。
+JS 端 invoke 時必須傳 **camelCase** key，Tauri 會自動轉回 snake_case 給 Rust：
+```typescript
+// Rust 定義: est_mins: i64
+invoke("cmd", { estMins: 60 })   // ✅ 正確
+invoke("cmd", { est_mins: 60 })  // ❌ 錯誤，會報 missing key
+```
+單字參數（`id`, `url`, `date` 等）不受影響。
+
 ---
 
 ## Modal 慣例

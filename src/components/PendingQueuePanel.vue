@@ -3,6 +3,7 @@
     <!-- Header -->
     <div class="flex items-center gap-2 px-3 py-2 border-b border-gray-700 shrink-0">
       <span class="text-xs font-semibold text-gray-400">待排定病患</span>
+      <span v-if="selectedDate && selectedDate !== todayStr" class="text-[10px] text-amber-400 ml-1">{{ selectedDate }}</span>
       <div class="flex-1" />
       <span class="text-[10px] text-gray-600">{{ waitingTasks.length }} 件</span>
     </div>
@@ -82,10 +83,31 @@ import ContextMenu from "./ContextMenu.vue";
 import PatientDetailModal from "./PatientDetailModal.vue";
 import SelfPayPickerModal from "./SelfPayPickerModal.vue";
 
+const props = defineProps<{ selectedDate?: string }>();
+
 const tasksStore  = useTasksStore();
 const roomsStore  = useRoomsStore();
 
-const waitingTasks = computed(() => tasksStore.scoredTasks.filter(ts => ts.task.status === "waiting"));
+function getTodayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+const todayStr = getTodayStr();
+
+function dateOfTs(ts: number): string {
+  const d = new Date(ts * 1000);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+const waitingTasks = computed(() => {
+  const date = props.selectedDate || todayStr;
+  const isToday = date === todayStr;
+  return tasksStore.scoredTasks.filter(ts => {
+    if (ts.task.status !== "waiting") return false;
+    if (!ts.task.scheduled_at) return isToday;
+    return dateOfTs(ts.task.scheduled_at) === date;
+  });
+});
 
 // ── Detail Modal (reactive via store lookup) ──────────────────────────────────
 const detailTaskId = ref<number | null>(null);

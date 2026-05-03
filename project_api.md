@@ -48,6 +48,7 @@
 | `create_task` | `task: SurgeryTask` | `SurgeryTask`（含 DB 產生的 id） |
 | `update_task` | `task: SurgeryTask` | `SurgeryTask` |
 | `delete_task` | `id: i64` | `void` |
+| `batch_create_tasks` | `tasks: SurgeryTask[]` | `void`（transaction，PDF 匯入用） |
 
 ### Staff CRUD
 
@@ -73,6 +74,7 @@
 |---------|------|------|
 | `get_room_shifts_by_date` | `date: string`（"YYYY-MM-DD"） | `RoomScheduleEntry[]` |
 | `replace_room_shifts_by_month` | `month: string`（忽略，以 entries 日期自動判斷）, `entries: RoomScheduleEntry[]` | `void` |
+| `replace_room_shifts_by_date` | `date: string`, `entries: RoomScheduleEntry[]` | `void`（DeptRoomModal 單日覆寫用） |
 
 ### Staff Assignments（拖拉指派）
 
@@ -113,33 +115,42 @@
 | `sync_pull` | — | `string`（成功訊息） |
 | `get_sync_timestamps` | — | `{ last_push_at: number \| null, last_pull_at: number \| null }` |
 
+### Room Recommendation（快速派房）
+
+| Command | 參數 | 回傳 |
+|---------|------|------|
+| `get_room_recommendation` | `urgency: string, dept: string, estMins: number, date: string` | `RoomRecommendation[]`（已按 score 降序） |
+
+**JS invoke 注意**：Tauri v2 自動將 Rust `est_mins` 轉為 JS `estMins`（camelCase），invoke 時必須傳 `{ estMins }` 而非 `{ est_mins }`。
+
 ---
 
 ## 資料格式備忘
 
-### SurgeryTask 完整欄位（Phase 6 擴充後）
+### SurgeryTask 完整欄位（Phase 10 擴充後）
 ```typescript
 interface SurgeryTask {
   id: number;
-  seq_no: number;       // PDF 序號
+  seq_no: number;                  // PDF 序號
   patient_name: string;
-  gender: string;       // "男" | "女"
+  gender: string;                  // "男" | "女"
   age: number;
   chart_no: string;
-  bed_no: string;       // 病床號（"ICU02", "門診" 等）
+  bed_no: string;                  // 病床號（"ICU02", "門診" 等）
   dept: string;
   diagnosis: string;
-  body_part: string;    // PDF 部位欄位
-  procedure: string;    // 術式
-  anesthesia: string;   // "G" | "E" | "IVG" 等
-  surgeon: string;      // 主刀醫師
+  body_part: string;               // PDF 部位欄位
+  procedure: string;               // 術式
+  anesthesia: string;              // "G" | "E" | "IVG" 等
+  surgeon: string;                 // 主刀醫師
   vs_note: string;
   expected_room: string;
   urgency: UrgencyLevel;
-  scheduled_at: number | null;  // unix timestamp
+  scheduled_at: number | null;     // unix timestamp
   created_at: number;
   est_time_mins: number;
-  status: string;       // "waiting" | "scheduled" | "completed"
+  status: string;                  // "waiting" | "scheduled" | "called" | "in_surgery" | "recovery"
+  linked_task_id?: number | null;  // Phase 10：兩科合刀雙向連結
 }
 ```
 
@@ -187,6 +198,21 @@ SQLite 儲存為 JSON 字串（如 `["OR1","OR3"]`），Rust 端 `serde_json::fr
 
 ### RoomScheduleEntry.date
 格式固定為 `"YYYY-MM-DD"`（字串）。`replace_by_month` 用 `date LIKE 'YYYY-MM%'` 清除整月資料。
+
+### RoomRecommendation
+```typescript
+interface RoomRecommendation {
+  room_name: string;
+  score: number;            // 綜合評分（越高越優先）
+  is_available: boolean;    // 目前無進行中/已叫刀任務
+  dept_match: boolean;      // preferred_rooms 或今日 room_shifts 包含此科別
+  has_staff: boolean;       // 同日 assignments 含 Scrub + Circ 各至少一人
+  within_deadline: boolean; // wait_secs + est_mins×60 ≤ 緊急截止秒數
+  est_available_mins: number; // 預估空出分鐘數（0 = 立即）
+  reason: string;           // 顯示用文字說明（中文）
+}
+```
+評分權重：dept_match +5000 / is_available +4000 / within_deadline +3000 / has_staff +1000 / is_backup −1000
 
 ### TaskWithScore
 ```typescript

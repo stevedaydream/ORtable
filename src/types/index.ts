@@ -50,6 +50,7 @@ export interface SurgeryTask {
   created_at: number;
   est_time_mins: number;
   status: string;
+  linked_task_id?: number | null;
 }
 
 export interface Staff {
@@ -139,6 +140,17 @@ export interface SelfPayItem {
 export interface SyncTimestamps {
   last_push_at: number | null;
   last_pull_at: number | null;
+}
+
+export interface RoomRecommendation {
+  room_name: string;
+  score: number;
+  is_available: boolean;
+  dept_match: boolean;
+  has_staff: boolean;
+  within_deadline: boolean;
+  est_available_mins: number;
+  reason: string;
 }
 
 export const URGENCY_WEIGHTS: Record<UrgencyLevel, number> = {

@@ -105,8 +105,17 @@
 <script setup lang="ts">
 import { ref, reactive } from "vue";
 import { useTasksStore } from "../stores/tasks";
-import type { SurgeryTask } from "../types";
+import type { SurgeryTask, UrgencyLevel } from "../types";
 
+interface QuickAssignPrefill {
+  expected_room?: string;
+  urgency?: UrgencyLevel;
+  dept?: string;
+  anesthesia?: string;
+  est_time_mins?: number;
+}
+
+const props = defineProps<{ prefill?: QuickAssignPrefill }>();
 const emit = defineEmits<{ close: []; saved: [task: SurgeryTask] }>();
 
 const tasksStore = useTasksStore();
@@ -128,18 +137,19 @@ const form = reactive<Omit<SurgeryTask, "id" | "created_at">>({
   age: 0,
   chart_no: "",
   bed_no: "",
-  dept: "",
+  dept: props.prefill?.dept || "",
   diagnosis: "",
   body_part: "",
   procedure: "",
-  anesthesia: "",
+  anesthesia: props.prefill?.anesthesia || "",
   surgeon: "",
   vs_note: "",
-  expected_room: "",
-  urgency: "Trauma",
+  expected_room: props.prefill?.expected_room || "",
+  urgency: props.prefill?.urgency || "Trauma",
   scheduled_at: null,
-  est_time_mins: 60,
+  est_time_mins: props.prefill?.est_time_mins || 60,
   status: "waiting",
+  linked_task_id: null,
 });
 
 async function submit() {

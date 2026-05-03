@@ -49,6 +49,8 @@ pub struct SurgeryTask {
     pub created_at: i64,
     pub est_time_mins: i32,
     pub status: String,
+    #[serde(default)]
+    pub linked_task_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -153,4 +155,17 @@ pub struct StaffComplianceResult {
     pub staff_id: i64,
     pub allowed: bool,
     pub reason: Option<String>,
+}
+
+/// Room recommendation entry for the quick-assign wizard.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoomRecommendation {
+    pub room_name: String,
+    pub score: i64,
+    pub is_available: bool,
+    pub dept_match: bool,
+    pub has_staff: bool,
+    pub within_deadline: bool,
+    pub est_available_mins: i64,
+    pub reason: String,
 }

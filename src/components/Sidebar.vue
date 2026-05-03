@@ -3,7 +3,7 @@ import { onMounted } from "vue";
 import { useSync } from "../composables/useSync";
 
 defineProps<{ backupActive?: boolean }>();
-const emit = defineEmits(["import", "add-emergency", "toggle-backup", "request-extra", "open-settings", "open-dept-room", "open-patient-list"]);
+const emit = defineEmits(["import", "add-emergency", "toggle-backup", "request-extra", "open-settings", "open-dept-room", "open-patient-list", "quick-assign"]);
 
 const sync = useSync();
 
@@ -52,6 +52,11 @@ onMounted(async () => {
       </button>
 
       <div class="my-1.5 border-t border-gray-700/60" />
+
+      <button class="flex items-center gap-2 w-full px-2 py-1.5 rounded text-xs text-violet-300 hover:bg-violet-700/30 transition-colors text-left" @click="emit('quick-assign')">
+        <i class="fa-solid fa-wand-magic-sparkles w-4 text-center"></i>
+        <span>快速派房</span>
+      </button>
 
       <button class="flex items-center gap-2 w-full px-2 py-1.5 rounded text-xs text-teal-300 hover:bg-teal-700/30 transition-colors text-left" @click="emit('open-dept-room')">
         <i class="fa-solid fa-calendar-days w-4 text-center"></i>

@@ -199,3 +199,77 @@ Gemini 新增拖拉指派與 StaffPool 功能後，`npx vue-tsc --noEmit` 回報
 解析結果（2026 年度）：1,486 筆、7 個月份（1～7 月有排班）、5 間刀房、12 個科別。
 
 **牽扯檔案:** `src/components/SettingsModal.vue`（`parseXlsx` 函式、`PERIOD_TIMES` 常數、`excelSerialToDateStr` 輔助函式）
+
+---
+
+### BF-009: GitHub Actions build succeeded but `latest.json` not generated
+
+**Problem:**
+`tauri-action@v0` completed without errors, release assets (`.exe`, `.dmg`) were uploaded, but no `latest.json` was present in the release — so the in-app updater could never find a new version.
+
+**Attempts:**
+1. Verified `TAURI_SIGNING_PRIVATE_KEY` secret was set in GitHub — error changed to "Signature not found for the updater JSON. Skipping upload..."
+2. Confirmed pubkey in `tauri.conf.json` matched the private key — still no `latest.json`
+3. Confirmed the private key GitHub Secret value must be the **decoded text content** of the `.key` file (starting with `untrusted comment: rsign encrypted secret key`), not a double-base64 string
+
+**Root cause:**
+`tauri.conf.json` was missing `"createUpdaterArtifacts": true` in the `bundle` section. Without this flag, Tauri 2.0 does not generate `.sig` signature files alongside the installers, so `tauri-action` finds no signatures to include and skips uploading `latest.json`.
+
+**Fix:**
+```json
+"bundle": {
+  "active": true,
+  "targets": "all",
+  "createUpdaterArtifacts": true,
+  ...
+}
+```
+
+**Files:** `src-tauri/tauri.conf.json`
+
+---
+
+### BF-010: Tauri v2 invoke 參數 camelCase 轉換問題
+
+**問題描述:**
+`get_room_recommendation` command 在 JS invoke 時傳入 `{ est_mins: estMins }`，
+執行期報錯：`invalid args 'estMins' for command 'get_room_recommendation': command get_room_recommendation missing required key estMins`
+
+**嘗試過程:**
+1. 以為 Tauri v2 JS→Rust 是「JS camelCase 傳入，Rust 自動解為 snake_case」→ 改用 `{ est_mins }` 後仍報錯
+2. 查看錯誤訊息方向相反：Tauri 報 `estMins` missing，不是 `est_mins` missing
+
+**根本原因:**
+Tauri v2 的 IPC 序列化方向是 **Rust snake_case → JS camelCase**（Rust 定義的 `est_mins` 在 JS 介面呈現為 `estMins`）。
+JS 端 invoke 時必須傳 camelCase 的 key，Tauri 再反向轉成 snake_case 給 Rust。
+
+**最終解法:**
+```typescript
+// 錯誤
+invoke("get_room_recommendation", { urgency, dept, est_mins: estMins, date })
+// 正確
+invoke("get_room_recommendation", { urgency, dept, estMins, date })
+```
+
+**牽扯檔案:** `src/composables/useDatabase.ts`
+
+---
+
+### BF-011: QuickAssignModal emit 順序導致 TaskFormModal 靜默失敗
+
+**問題描述:**
+點擊「建立急診單」後，畫面靜默無反應，TaskFormModal 沒有開啟，console 也無錯誤。
+
+**根本原因:**
+`confirm()` 同時 emit 兩個事件：
+```typescript
+emit("confirmed", prefill);  // App.vue → modal = "emergency"
+emit("close");               // App.vue → modal = null  ← 覆蓋上面的賦值
+```
+Vue 在同一 tick 內處理事件，`close` 的 handler 在 `confirmed` 之後執行，將 `modal` 從 `"emergency"` 重設為 `null`，TaskFormModal 的 `v-if` 永遠不會成真。
+
+**最終解法:**
+`confirm()` 中移除 `emit("close")`。
+App.vue 將 modal 切換為 `"emergency"` 後，QuickAssignModal 的 `v-if="modal === 'quick_assign'"` 自然變 false，元件會自動卸載。
+
+**牽扯檔案:** `src/components/QuickAssignModal.vue`
