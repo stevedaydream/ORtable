@@ -46,14 +46,7 @@
       />
     </div>
 
-    <Transition name="banner">
-      <div v-if="updater.status.value === 'available'" class="fixed top-3 left-1/2 -translate-x-1/2 bg-blue-800 border border-blue-600 rounded-lg px-4 py-2 flex items-center gap-3 text-sm z-40 shadow-xl">
-        <i class="fa-solid fa-circle-up text-blue-300"></i>
-        <span>新版本 <strong>{{ updater.updateVersion.value }}</strong> 可用</span>
-        <button class="bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded text-xs" @click="updater.installUpdate()">立即更新</button>
-        <button class="text-blue-400 hover:text-white ml-1" @click="updater.status.value = 'idle'"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-    </Transition>
+    <UpdateModal v-if="updater.status.value === 'available'" />
 
     <TaskFormModal   v-if="modal === 'emergency'" @close="modal = null" />
     <ImportModal     v-if="modal === 'import'"    @close="modal = null" />
@@ -77,6 +70,7 @@ import TimelinePanel from "./components/TimelinePanel.vue";
 import StaffPoolPanel from "./components/StaffPoolPanel.vue";
 import PendingQueuePanel from "./components/PendingQueuePanel.vue";
 import PatientListPanel from "./components/PatientListPanel.vue";
+import UpdateModal from "./components/UpdateModal.vue";
 import { useLogger } from "./composables/useLogger";
 import { useUpdater } from "./composables/useUpdater";
 import { useTasksStore } from "./stores/tasks";

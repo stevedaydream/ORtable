@@ -577,6 +577,50 @@
           </div>
         </template>
 
+        <!-- ── 更新紀錄 ──────────────────────────────────────────── -->
+        <template v-if="tab === 'changelog'">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <span class="text-sm text-gray-300 font-medium">Smart OR Triage</span>
+              <span class="ml-2 text-xs font-mono text-gray-500">目前版本 v{{ appVersion }}</span>
+            </div>
+            <div v-if="updater.status.value === 'available'" class="flex items-center gap-2">
+              <span class="text-xs text-blue-300">新版本 <strong>v{{ updater.updateVersion.value }}</strong> 可用</span>
+              <button class="text-xs px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white" @click="updater.status.value = 'available'">
+                <i class="fa-solid fa-circle-up mr-1"></i>更新
+              </button>
+            </div>
+            <div v-else-if="updater.status.value === 'checking'" class="text-xs text-gray-500">
+              <i class="fa-solid fa-spinner animate-spin mr-1"></i>檢查更新中…
+            </div>
+            <div v-else-if="updater.status.value === 'up-to-date'" class="text-xs text-green-400">
+              <i class="fa-solid fa-check-circle mr-1"></i>已是最新版本
+            </div>
+            <button v-else class="text-xs text-gray-400 hover:text-gray-200" @click="checkUpdate">
+              <i class="fa-solid fa-rotate mr-1"></i>檢查更新
+            </button>
+          </div>
+
+          <div class="space-y-4">
+            <div
+              v-for="entry in CHANGELOG" :key="entry.version"
+              class="bg-gray-700/40 rounded-lg border border-gray-700 overflow-hidden"
+            >
+              <div class="flex items-center gap-3 px-4 py-2.5 bg-gray-700/60 border-b border-gray-700">
+                <span class="text-sm font-bold font-mono text-blue-300">v{{ entry.version }}</span>
+                <span class="text-xs text-gray-500">{{ entry.date }}</span>
+                <span v-if="entry.version === appVersion" class="ml-auto text-[10px] px-2 py-0.5 rounded bg-blue-900/60 border border-blue-700 text-blue-300">目前版本</span>
+              </div>
+              <ul class="px-4 py-3 space-y-1.5">
+                <li v-for="(change, i) in entry.changes" :key="i" class="flex items-start gap-2 text-xs text-gray-300">
+                  <i class="fa-solid fa-circle-dot text-[8px] text-blue-500 mt-1 shrink-0"></i>
+                  {{ change }}
+                </li>
+              </ul>
+            </div>
+          </div>
+        </template>
+
       </div>
 
     </div>
@@ -586,26 +630,36 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from "vue";
 import * as XLSX from "xlsx";
+import { getVersion } from "@tauri-apps/api/app";
 import { useRoomsStore } from "../stores/rooms";
 import { useStaffStore } from "../stores/staff";
 import { useDeptRulesStore } from "../stores/deptRules";
 import { useRoomShiftsDb, useStaffRosterDb, useSettings, useSelfPayDb } from "../composables/useDatabase";
 import { useLogger } from "../composables/useLogger";
+import { useUpdater } from "../composables/useUpdater";
+import { CHANGELOG } from "../data/changelog";
 import type { Room, SelfPayItem, Staff, RoomScheduleEntry, StaffCategory, StaffRosterEntry } from "../types";
 import { STAFF_CATEGORY_LABELS } from "../types";
 
 defineEmits<{ close: [] }>();
 
-const tab = ref<"rooms" | "staff" | "depts" | "selfpay" | "cloud">("rooms");
+const tab = ref<"rooms" | "staff" | "depts" | "selfpay" | "cloud" | "changelog">("rooms");
 const logger = useLogger();
+const updater = useUpdater();
+const appVersion = ref("—");
 
 const TABS = [
-  { key: "rooms",   label: "房間管理", icon: "fa-door-open" },
-  { key: "staff",   label: "人員管理", icon: "fa-users" },
-  { key: "depts",   label: "科別管理", icon: "fa-layer-group" },
-  { key: "selfpay", label: "自費項目", icon: "fa-receipt" },
-  { key: "cloud",   label: "雲端設定", icon: "fa-cloud" },
+  { key: "rooms",     label: "房間管理", icon: "fa-door-open" },
+  { key: "staff",     label: "人員管理", icon: "fa-users" },
+  { key: "depts",     label: "科別管理", icon: "fa-layer-group" },
+  { key: "selfpay",   label: "自費項目", icon: "fa-receipt" },
+  { key: "cloud",     label: "雲端設定", icon: "fa-cloud" },
+  { key: "changelog", label: "更新紀錄", icon: "fa-clock-rotate-left" },
 ] as const;
+
+async function checkUpdate() {
+  await updater.checkForUpdate();
+}
 
 const CATEGORY_LABELS = STAFF_CATEGORY_LABELS;
 const CATEGORIES: StaffCategory[] = ["vs", "r", "sa", "or_nurse", "intern", "cross_train"];
@@ -1296,5 +1350,6 @@ onMounted(async () => {
   await Promise.all([roomsStore.load(), staffStore.load(), deptRulesStore.load(), loadSelfPay()]);
   const url = await getGasUrl();
   if (url) gasUrl.value = url;
+  appVersion.value = await getVersion().catch(() => "—");
 });
 </script>

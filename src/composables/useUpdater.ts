@@ -4,6 +4,7 @@ export type UpdateStatus = "idle" | "checking" | "available" | "downloading" | "
 
 const status = ref<UpdateStatus>("idle");
 const updateVersion = ref<string | null>(null);
+const updateBody = ref<string | null>(null);
 
 export function useUpdater() {
   async function checkForUpdate() {
@@ -14,6 +15,7 @@ export function useUpdater() {
       if (update?.available) {
         status.value = "available";
         updateVersion.value = update.version;
+        updateBody.value = update.body ?? null;
         return update;
       }
       status.value = "up-to-date";
@@ -39,5 +41,5 @@ export function useUpdater() {
     }
   }
 
-  return { status, updateVersion, checkForUpdate, installUpdate };
+  return { status, updateVersion, updateBody, checkForUpdate, installUpdate };
 }

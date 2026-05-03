@@ -54,8 +54,43 @@ if /i not "%CONFIRM%"=="y" (
 )
 
 echo.
-echo [1/4] Updating version numbers...
+echo [1/4] Updating changelog and version numbers...
 
+:: Write changelog-generator PS1 to temp file
+set PSF=%TEMP%\ortable_cl.ps1
+del "%PSF%" 2>nul
+echo $NewVer = '%NEW_VER%' >> "%PSF%"
+echo $fmt = '--pretty=format:%%s' >> "%PSF%"
+echo $prevTag = ^(git tag --sort='-version:refname'^) ^| Select-Object -Skip 1 -First 1 >> "%PSF%"
+echo if ^($prevTag^) { $commits = @^(git log $fmt ^($prevTag + '..HEAD'^)^) } else { $commits = @^(git log $fmt HEAD^) } >> "%PSF%"
+echo $commits = @^($commits ^| Where-Object { $_ -ne '' -and $_ -notmatch '^^chore: bump' }^) >> "%PSF%"
+echo if ^($commits.Count -eq 0^) { >> "%PSF%"
+echo     Write-Host "WARNING: No commits found between tags" -ForegroundColor Yellow >> "%PSF%"
+echo } else { >> "%PSF%"
+echo     Write-Host "Commits to include in changelog:" -ForegroundColor Cyan >> "%PSF%"
+echo     $commits ^| ForEach-Object { Write-Host "  - $_" -ForegroundColor Gray } >> "%PSF%"
+echo } >> "%PSF%"
+echo Write-Host "" >> "%PSF%"
+echo $ok = Read-Host "Auto-write to changelog.ts? ^(y/N^)" >> "%PSF%"
+echo if ^($ok -notmatch '^^[Yy]'^) { Write-Host "Cancelled." -ForegroundColor Red; exit 1 } >> "%PSF%"
+echo $q = [char]34 >> "%PSF%"
+echo $today = Get-Date -Format 'yyyy-MM-dd' >> "%PSF%"
+echo $nl = [char]10 >> "%PSF%"
+echo $lines = ^($commits ^| ForEach-Object { '      ' + $q + $_ + $q + ',' }^) -join $nl >> "%PSF%"
+echo $newEntry = '  {' + $nl + '    version: ' + $q + $NewVer + $q + ',' + $nl + '    date: ' + $q + $today + $q + ',' + $nl + '    changes: [' + $nl + $lines + $nl + '    ],' + $nl + '  },' >> "%PSF%"
+echo $enc = New-Object System.Text.UTF8Encoding^($false^) >> "%PSF%"
+echo $f = 'src\data\changelog.ts' >> "%PSF%"
+echo $content = [System.IO.File]::ReadAllText^($f^) >> "%PSF%"
+echo $marker = 'export const CHANGELOG: ChangelogEntry[] = [' >> "%PSF%"
+echo $content = $content.Replace^($marker, $marker + $nl + $newEntry^) >> "%PSF%"
+echo [System.IO.File]::WriteAllText^($f, $content, $enc^) >> "%PSF%"
+echo Write-Host "changelog.ts updated — $^($commits.Count^) commits written" -ForegroundColor Green >> "%PSF%"
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PSF%"
+if errorlevel 1 ( del "%PSF%" 2>nul & pause & goto MENU )
+del "%PSF%" 2>nul
+
+:: Update version in package.json, tauri.conf.json, Cargo.toml
 powershell -NoProfile -Command "$enc = New-Object System.Text.UTF8Encoding($false); $f = 'package.json'; [System.IO.File]::WriteAllText($f, ([System.IO.File]::ReadAllText($f) -replace '\"version\": \"%CURRENT_VER%\"', '\"version\": \"%NEW_VER%\"'), $enc)"
 if errorlevel 1 ( echo ERROR: package.json failed & pause & goto MENU )
 
@@ -69,7 +104,7 @@ echo   Done.
 
 echo.
 echo [2/4] Git commit...
-git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml
+git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src/data/changelog.ts
 git add release.bat gas/.clasp.json 2>nul
 git diff --cached --quiet
 if not errorlevel 1 (
