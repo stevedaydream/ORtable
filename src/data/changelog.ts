@@ -6,6 +6,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.1.2",
+    date: "2026-05-20",
+    changes: [
+      "feat: enhance staff pool and timeline panels with edit mode and room management",
+      "chore: update smart-or-triage version to 0.1.1 and remove unused import in TimelinePanel",
+      "feat: add room recommendation functionality and related types",
+    ],
+  },
+  {
     version: "0.1.1",
     date: "2026-05-03",
     changes: [
