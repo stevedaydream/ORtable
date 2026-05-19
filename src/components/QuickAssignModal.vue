@@ -63,7 +63,7 @@
               :class="form.anesthesia === a
                 ? 'bg-gray-600 border-gray-400 text-white'
                 : 'border-gray-700 text-gray-400 hover:bg-gray-700/50'"
-              @click="form.anesthesia = a"
+              @click="form.anesthesia = a; fetchRecs()"
             >{{ a }}</button>
           </div>
         </div>
@@ -101,10 +101,10 @@
             <div class="text-[10px] text-gray-700 mt-1">請確認「設定 → 房間管理」已新增手術室</div>
           </div>
 
-          <div v-else class="space-y-2">
+          <div v-else class="space-y-1.5">
             <div
               v-for="(rec, i) in recommendations" :key="rec.room_name"
-              class="flex items-center gap-3 rounded-lg border px-4 py-3 cursor-pointer transition-all"
+              class="flex items-center gap-3 rounded-lg border px-3 py-2.5 cursor-pointer transition-all"
               :class="[
                 selectedRoom === rec.room_name
                   ? 'border-violet-500 bg-violet-900/20'
@@ -113,25 +113,44 @@
               ]"
               @click="selectedRoom = rec.room_name"
             >
-              <div class="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-sm"
-                :class="i === 0 ? 'text-green-400' : 'text-gray-500'">
-                {{ i === 0 ? '✅' : i === 1 ? '⬜' : '⚠️' }}
+              <!-- Rank icon -->
+              <div class="shrink-0 text-base w-5 text-center">
+                {{ i === 0 ? '🏆' : i === 1 ? '🥈' : i === 2 ? '🥉' : '·' }}
               </div>
+
+              <!-- Main info -->
               <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2">
-                  <span class="text-sm font-bold" :class="i === 0 ? 'text-gray-100' : 'text-gray-300'">{{ rec.room_name }}</span>
-                  <span v-if="rec.dept_match" class="text-[9px] bg-teal-900/60 text-teal-300 border border-teal-700/50 px-1 rounded">科別符合</span>
-                  <span v-if="rec.has_staff" class="text-[9px] bg-blue-900/60 text-blue-300 border border-blue-700/50 px-1 rounded">人員就位</span>
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="text-sm font-bold" :class="i === 0 ? 'text-gray-100' : 'text-gray-300'">
+                    {{ rec.room_name }}
+                  </span>
+                  <span v-if="rec.dept_match"
+                    class="text-[9px] bg-teal-900/60 text-teal-300 border border-teal-700/50 px-1 rounded">
+                    科別符合
+                  </span>
+                  <span v-if="rec.has_staff"
+                    class="text-[9px] bg-blue-900/60 text-blue-300 border border-blue-700/50 px-1 rounded">
+                    <i class="fa-solid fa-user-check text-[8px] mr-0.5"></i>人員就位
+                  </span>
+                  <span v-else
+                    class="text-[9px] bg-gray-800 text-gray-600 border border-gray-700 px-1 rounded">
+                    <i class="fa-solid fa-user-slash text-[8px] mr-0.5"></i>未排人員
+                  </span>
                 </div>
-                <div class="text-[10px] text-gray-400 mt-0.5">{{ rec.reason }}</div>
+                <div class="text-[10px] text-gray-400 mt-0.5 truncate">{{ rec.reason }}</div>
               </div>
+
+              <!-- Availability -->
               <div class="shrink-0 text-right">
-                <div class="text-xs font-mono"
+                <div class="text-xs font-bold"
                   :class="rec.is_available ? 'text-green-400' : rec.within_deadline ? 'text-yellow-400' : 'text-red-400'">
-                  {{ rec.is_available ? '立即' : `+${rec.est_available_mins}m` }}
+                  {{ rec.is_available ? '立即可用' : `+${rec.est_available_mins}m` }}
                 </div>
-                <div v-if="!rec.within_deadline" class="text-[9px] text-red-400">超出截止</div>
+                <div v-if="!rec.within_deadline" class="text-[9px] text-red-400 mt-0.5">⚠ 超出截止</div>
+                <div v-else-if="!rec.is_available" class="text-[9px] text-gray-600 mt-0.5">等待中</div>
               </div>
+
+              <!-- Selected check -->
               <div class="shrink-0 w-4">
                 <i v-if="selectedRoom === rec.room_name" class="fa-solid fa-circle-check text-violet-400 text-xs"></i>
               </div>
@@ -154,7 +173,11 @@
             :disabled="!selectedRoom || !form.urgency"
             @click="confirm"
           >
-            確認排入 {{ selectedRoom || '—' }}，{{ form.urgency === 'Normal' ? '建立病人資料' : '建立急診單' }}
+            <i class="fa-solid fa-wand-magic-sparkles mr-1.5"></i>
+            排入 {{ selectedRoom || '—' }}
+            <span class="text-xs font-normal opacity-80 ml-1">
+              · {{ form.urgency === 'Normal' ? '建立病人資料' : '建立急診單' }}
+            </span>
           </button>
         </div>
       </div>

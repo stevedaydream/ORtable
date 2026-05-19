@@ -362,7 +362,9 @@ pub async fn get_room_recommendation(
         .map(|r| r.preferred_rooms.clone())
         .unwrap_or_default();
 
-    let mut results: Vec<RoomRecommendation> = rooms.iter().map(|room| {
+    let mut results: Vec<RoomRecommendation> = rooms.iter()
+        .filter(|room| room.is_active)   // 停用房間不列入推薦
+        .map(|room| {
         let active_tasks: Vec<&SurgeryTask> = tasks.iter().filter(|t| {
             t.expected_room == room.name &&
             matches!(t.status.as_str(), "scheduled" | "called" | "in_surgery")
@@ -384,13 +386,20 @@ pub async fn get_room_recommendation(
             .map(|d| wait_secs + est_mins * 60 <= d)
             .unwrap_or(true);
 
+        // 當日本科別有時段排班（偏好房間 or 時段科別吻合）
         let dept_match = preferred_rooms.contains(&room.name) ||
             shifts.iter().any(|s| s.room_name == room.name && s.dept == dept);
+
+        // 今日有任何科別時段排班（顯示用）
+        let room_shifts: Vec<&_> = shifts.iter()
+            .filter(|s| s.room_name == room.name).collect();
+        let has_any_shift = !room_shifts.is_empty();
 
         let room_assignments: Vec<&StaffAssignment> = assignments.iter()
             .filter(|a| a.room_name == room.name).collect();
         let has_scrub = room_assignments.iter().any(|a| a.role == "Scrub");
         let has_circ  = room_assignments.iter().any(|a| a.role == "Circ");
+        let has_sa    = room_assignments.iter().any(|a| a.role == "SA");
         let has_staff = has_scrub && has_circ;
 
         let mut score: i64 = 0;
@@ -398,11 +407,12 @@ pub async fn get_room_recommendation(
         if is_available    { score += 4000; }
         if within_deadline { score += 3000; }
         if has_staff       { score += 1000; }
+        if has_sa          { score += 200; }
+        if has_any_shift && !dept_match { score -= 500; } // 有他科排班，偏低優先
         if room.is_backup  { score -= 1000; }
 
-        let reason = if is_available {
-            if dept_match { "空刀房 · 科別符合".to_string() }
-            else { "空刀房".to_string() }
+        let avail_str = if is_available {
+            "空刀房".to_string()
         } else if est_available_mins > 0 {
             let h = est_available_mins / 60;
             let m = est_available_mins % 60;
@@ -411,6 +421,12 @@ pub async fn get_room_recommendation(
         } else {
             "忙碌中".to_string()
         };
+        let dept_str = if dept_match { " · 科別符合".to_string() }
+            else if has_any_shift {
+                let depts: Vec<&str> = room_shifts.iter().map(|s| s.dept.as_str()).collect();
+                format!(" · 排班：{}", depts.join("/"))
+            } else { String::new() };
+        let reason = format!("{}{}", avail_str, dept_str);
 
         RoomRecommendation {
             room_name: room.name.clone(),

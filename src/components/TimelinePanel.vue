@@ -872,15 +872,22 @@ const disableModal = reactive<{
 }>({ open: false, room: null, affectedShifts: [] });
 
 async function toggleRoomActive(room: Room) {
-  if (room.is_active) {
-    // 停用前檢查當日是否有科別時段
-    const affected = shiftsForRoom(room.name);
-    if (affected.length > 0) {
-      disableModal.room          = room;
-      disableModal.affectedShifts = [...affected];
-      disableModal.open          = true;
-      return;
+  if (!room.is_active) {
+    // 重新啟用
+    try {
+      await roomsStore.edit({ ...room, is_active: true });
+    } catch (e) {
+      console.error("[Timeline] 啟用房間失敗:", e);
     }
+    return;
+  }
+  // 停用前檢查當日是否有科別時段
+  const affected = shiftsForRoom(room.name);
+  if (affected.length > 0) {
+    disableModal.room          = room;
+    disableModal.affectedShifts = [...affected];
+    disableModal.open          = true;
+    return;
   }
   await applyDisableRoom(room, false);
 }
