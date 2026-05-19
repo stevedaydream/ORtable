@@ -100,5 +100,11 @@ export function useRoomRecommendationDb() {
 export function useSettings() {
   const getGasUrl = () => invoke<string | null>("get_gas_url");
   const setGasUrl = (url: string) => invoke<void>("set_gas_url", { url });
-  return { getGasUrl, setGasUrl };
+  const getAppZoom = () => invoke<number>("get_app_zoom");
+  const setAppZoom = (zoom: number) => invoke<void>("set_app_zoom", { zoom });
+  const getRoomCodeMap = () => invoke<string>("get_room_code_map");
+  const setRoomCodeMap = (map: string) => invoke<void>("set_room_code_map", { map });
+  const getRoomGroups  = () => invoke<string>("get_room_groups");
+  const setRoomGroups  = (groups: string) => invoke<void>("set_room_groups", { groups });
+  return { getGasUrl, setGasUrl, getAppZoom, setAppZoom, getRoomCodeMap, setRoomCodeMap, getRoomGroups, setRoomGroups };
 }

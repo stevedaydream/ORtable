@@ -29,7 +29,7 @@
         </section>
         <section class="flex-[1] flex flex-col overflow-hidden">
           <div class="flex-[2] overflow-hidden border-b border-gray-700">
-            <StaffPoolPanel @assigned="onStaffAssigned" />
+            <StaffPoolPanel :date="selectedDate" @assigned="onStaffAssigned" />
           </div>
           <div class="flex-[3] overflow-hidden">
             <PendingQueuePanel :selected-date="selectedDate" />

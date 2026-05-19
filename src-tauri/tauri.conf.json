@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "Smart OR Triage",
-        "width": 1440,
-        "height": 900,
+        "width": 1872,
+        "height": 1170,
         "dragDropEnabled": false
       }
     ],

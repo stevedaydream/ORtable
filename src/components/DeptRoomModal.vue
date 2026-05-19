@@ -159,12 +159,39 @@
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted } from "vue";
 import type { RoomScheduleEntry } from "../types";
-import { useRoomShiftsDb } from "../composables/useDatabase";
+import { useRoomShiftsDb, useSettings } from "../composables/useDatabase";
 import { useRoomsStore } from "../stores/rooms";
 
 defineEmits<{ close: [] }>();
 const roomShiftsDb = useRoomShiftsDb();
-const roomsStore = useRoomsStore();
+const roomsStore   = useRoomsStore();
+const { getRoomGroups } = useSettings();
+
+const roomGroupsMap = ref<Record<string, string[]>>({});
+
+async function loadRoomGroups() {
+  try {
+    const raw = await getRoomGroups();
+    roomGroupsMap.value = JSON.parse(raw || "{}");
+  } catch { roomGroupsMap.value = {}; }
+}
+
+function expandByGroups(entries: RoomScheduleEntry[]): RoomScheduleEntry[] {
+  const groups = roomGroupsMap.value;
+  if (!Object.keys(groups).length) return entries;
+  const result: RoomScheduleEntry[] = [];
+  for (const entry of entries) {
+    const physical = groups[entry.room_name];
+    if (physical && physical.length) {
+      for (const roomName of physical) {
+        result.push({ ...entry, id: 0, room_name: roomName });
+      }
+    } else {
+      result.push(entry);
+    }
+  }
+  return result;
+}
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const loading = ref(false);
@@ -219,7 +246,7 @@ async function loadForDate() {
 
 onMounted(async () => {
   await roomsStore.load();
-  await loadForDate();
+  await Promise.all([loadForDate(), loadRoomGroups()]);
 });
 
 // ── Edit row ──────────────────────────────────────────────────────────────────
@@ -281,8 +308,10 @@ async function saveAll() {
   saving.value = true;
   saveResult.value = null;
   try {
-    await roomShiftsDb.replaceByDate(selectedDate.value, rows.value);
-    saveResult.value = { ok: true, message: `✓ 已儲存 ${rows.value.length} 筆排班` };
+    const toSave = expandByGroups(rows.value);
+    await roomShiftsDb.replaceByDate(selectedDate.value, toSave);
+    const expandedNote = toSave.length !== rows.value.length ? `（展開後 ${toSave.length} 筆）` : "";
+    saveResult.value = { ok: true, message: `✓ 已儲存 ${rows.value.length} 筆排班${expandedNote}` };
   } catch (e) {
     saveResult.value = { ok: false, message: `儲存失敗：${e}` };
     console.error("[DeptRoomModal] 儲存失敗:", e);

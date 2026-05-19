@@ -1,6 +1,6 @@
 <template>
   <div class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" @mousedown.self="$emit('close')">
-    <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh]">
+    <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh] overflow-hidden">
 
       <!-- Header -->
       <div class="flex items-center justify-between px-5 py-4 border-b border-gray-700 shrink-0">
@@ -27,7 +27,7 @@
       </div>
 
       <!-- Body -->
-      <div class="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+      <div class="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4">
 
         <!-- ── Target Date (shared between tabs) ─────────────────────── -->
         <div class="flex items-center gap-3 bg-gray-900/50 rounded-lg px-4 py-2.5">
@@ -298,13 +298,14 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
 import { useTasksStore } from "../stores/tasks";
-import { useTasksDb } from "../composables/useDatabase";
+import { useTasksDb, useSettings } from "../composables/useDatabase";
 import type { SurgeryTask, UrgencyLevel } from "../types";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 const emit = defineEmits<{ close: []; imported: [count: number] }>();
 const tasksStore = useTasksStore();
 const tasksDb = useTasksDb();
+const { getRoomCodeMap } = useSettings();
 
 // ── Tab ───────────────────────────────────────────────────────────────────────
 type TabId = "csv" | "pdf";
@@ -594,6 +595,17 @@ function readPdfFile(file: File) {
       const result = await parsePdfBuffer(buffer);
       pdfDate.value = result.date;
       let tasks = result.tasks;
+      // Apply room code map (05 → OR5 etc.)
+      try {
+        const rawMap = await getRoomCodeMap();
+        const codeMap: Record<string, string> = JSON.parse(rawMap || "{}");
+        if (Object.keys(codeMap).length) {
+          tasks = tasks.map(t => {
+            const mapped = codeMap[t.expected_room.toLowerCase().trim()];
+            return mapped ? { ...t, expected_room: mapped } : t;
+          });
+        }
+      } catch { /* 若設定讀取失敗，直接使用原始代碼 */ }
       if (targetDate.value && targetDate.value !== result.date) {
         tasks = shiftTasksToDate(tasks, result.date, targetDate.value);
       }

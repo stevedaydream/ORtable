@@ -71,6 +71,7 @@ export interface Room {
   name: string;
   display_order: number;
   is_backup: boolean;
+  is_active: boolean;
 }
 
 export interface StaffAssignment {
@@ -86,6 +87,8 @@ export interface StaffRosterEntry {
   staff_name: string;
   date: string;
   shift_name: string;
+  start_time: string; // "HH:MM"
+  end_time: string;   // "HH:MM" (若 < start_time 表示跨日)
 }
 
 export interface ShiftDefinition {

@@ -104,7 +104,9 @@ async fn migrate(pool: &SqlitePool) -> Result<(), String> {
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
             staff_name TEXT    NOT NULL DEFAULT '',
             date       TEXT    NOT NULL DEFAULT '',
-            shift_name TEXT    NOT NULL DEFAULT ''
+            shift_name TEXT    NOT NULL DEFAULT '',
+            start_time TEXT    NOT NULL DEFAULT '',
+            end_time   TEXT    NOT NULL DEFAULT ''
         )",
         "CREATE TABLE IF NOT EXISTS shift_definitions (
             name       TEXT    PRIMARY KEY,
@@ -139,6 +141,9 @@ async fn migrate(pool: &SqlitePool) -> Result<(), String> {
         "ALTER TABLE surgery_tasks ADD COLUMN anesthesia TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE surgery_tasks ADD COLUMN surgeon TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE surgery_tasks ADD COLUMN linked_task_id INTEGER",
+        "ALTER TABLE staff_roster ADD COLUMN start_time TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE staff_roster ADD COLUMN end_time TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE rooms ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1",
     ] {
         let _ = sqlx::query(stmt).execute(pool).await;
     }

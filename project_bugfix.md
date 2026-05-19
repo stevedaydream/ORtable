@@ -273,3 +273,32 @@ Vue 在同一 tick 內處理事件，`close` 的 handler 在 `confirmed` 之後�
 App.vue 將 modal 切換為 `"emergency"` 後，QuickAssignModal 的 `v-if="modal === 'quick_assign'"` 自然變 false，元件會自動卸載。
 
 **牽扯檔案:** `src/components/QuickAssignModal.vue`
+
+---
+
+### BF-012: CSS `zoom` 在 WebView2 不更新 `vh` 基準，導致 Modal 超出螢幕
+
+**問題描述:**
+`html { zoom: 1.3; }` 讓整體 UI 放大，但 `max-h-[90vh]` 的 modal 高度仍超出可視範圍，Footer 的匯入按鈕無法點擊。
+
+**嘗試過程:**
+1. 在 modal flex body 加 `min-h-0` — 無效
+2. 在 modal 容器加 `overflow-hidden` — 無效
+3. 將 `tauri.conf.json` 視窗尺寸從 1440×900 放大至 1872×1170 — 無效
+
+**根本原因:**
+CSS `zoom` 屬性在 WebView2 (Chromium) 中**不會縮小 `vh` 的計算基準**。`1vh` 仍等於物理視窗高度的 1%，而不是縮放後的 layout viewport 高度。結果：`max-h-[90vh]` 在 CSS 中是 810px，經 zoom 1.3 放大後實際佔用 **1053px 物理空間**，超過 900px 物理視窗。
+
+瀏覽器原生縮放（Tauri `set_zoom()`）則**正確更新 layout viewport**，`vh` 基準會隨之縮小，`max-h-[90vh]` 才能如預期工作。
+
+**最終解法:**
+1. `src/assets/main.css`：移除 `html { zoom: var(--app-zoom); }`
+2. `src-tauri/src/lib.rs`：在 `.setup()` 最前面加入 Tauri 原生縮放：
+   ```rust
+   if let Some(win) = app.get_webview_window("main") {
+       let _ = win.set_zoom(1.3);
+   }
+   ```
+3. `src-tauri/tauri.conf.json`：視窗改為 `1872×1170`（= 1440×900 × 1.3），使 `set_zoom(1.3)` 後 CSS layout viewport 恰好還原為 1440×900，保留原始 layout 設計尺寸。
+
+**牽扯檔案:** `src/assets/main.css`、`src-tauri/src/lib.rs`、`src-tauri/tauri.conf.json`

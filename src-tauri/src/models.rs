@@ -74,7 +74,11 @@ pub struct Room {
     pub name: String,
     pub display_order: i32,
     pub is_backup: bool,
+    #[serde(default = "default_true")]
+    pub is_active: bool,
 }
+
+fn default_true() -> bool { true }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RoomScheduleEntry {
@@ -101,7 +105,9 @@ pub struct StaffRosterEntry {
     pub id: i64,
     pub staff_name: String,
     pub date: String,       // "YYYY-MM-DD"
-    pub shift_name: String, // e.g., "D", "N1", "OFF"
+    pub shift_name: String, // e.g., "L023", "A200"
+    pub start_time: String, // "HH:MM"
+    pub end_time: String,   // "HH:MM" (if < start_time, implies next day)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

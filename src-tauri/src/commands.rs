@@ -166,6 +166,45 @@ pub async fn set_gas_url(
     db::settings::set(&state.db, "gas_url", &url).await
 }
 
+#[tauri::command]
+pub async fn get_app_zoom(state: tauri::State<'_, AppState>) -> Result<f64, String> {
+    let val = db::settings::get(&state.db, "app_zoom").await?;
+    Ok(val.and_then(|s| s.parse::<f64>().ok()).unwrap_or(1.3))
+}
+
+#[tauri::command]
+pub async fn set_app_zoom(
+    state: tauri::State<'_, AppState>,
+    window: tauri::WebviewWindow,
+    zoom: f64,
+) -> Result<(), String> {
+    let zoom = zoom.clamp(0.5, 3.0);
+    db::settings::set(&state.db, "app_zoom", &zoom.to_string()).await?;
+    window.set_zoom(zoom).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_room_groups(state: tauri::State<'_, AppState>) -> Result<String, String> {
+    let val = db::settings::get(&state.db, "room_groups").await?;
+    Ok(val.unwrap_or_else(|| "{}".to_string()))
+}
+
+#[tauri::command]
+pub async fn set_room_groups(state: tauri::State<'_, AppState>, groups: String) -> Result<(), String> {
+    db::settings::set(&state.db, "room_groups", &groups).await
+}
+
+#[tauri::command]
+pub async fn get_room_code_map(state: tauri::State<'_, AppState>) -> Result<String, String> {
+    let val = db::settings::get(&state.db, "room_code_map").await?;
+    Ok(val.unwrap_or_else(|| "{}".to_string()))
+}
+
+#[tauri::command]
+pub async fn set_room_code_map(state: tauri::State<'_, AppState>, map: String) -> Result<(), String> {
+    db::settings::set(&state.db, "room_code_map", &map).await
+}
+
 // ── Rooms CRUD ────────────────────────────────────────────────────────────────
 
 #[tauri::command]

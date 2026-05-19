@@ -112,21 +112,33 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, computed, ref } from "vue";
+import { reactive, computed, ref, watch } from "vue";
 import { useStaffStore } from "../stores/staff";
 import { useRoomsStore } from "../stores/rooms";
 import { useAssignmentsStore } from "../stores/assignments";
 import { useDragState } from "../composables/useDragState";
+import { useStaffRosterDb } from "../composables/useDatabase";
 import type { Staff, StaffAssignment, StaffCategory } from "../types";
 import { STAFF_CATEGORY_LABELS } from "../types";
 import ContextMenu from "./ContextMenu.vue";
 
-const staffStore      = useStaffStore();
-const roomsStore      = useRoomsStore();
+const props = defineProps<{ date?: string }>();
+const emit  = defineEmits(["assigned"]);
+
+const staffStore       = useStaffStore();
+const roomsStore       = useRoomsStore();
 const assignmentsStore = useAssignmentsStore();
+const staffRosterDb    = useStaffRosterDb();
 const { isDragging, dragType } = useDragState();
 
-const emit = defineEmits(["assigned"]);
+// 當日有班表的人名 Set（空 = 尚無班表資料，顯示全員）
+const rosterNames = ref(new Set<string>());
+
+watch(() => props.date, async (date) => {
+  if (!date) { rosterNames.value = new Set(); return; }
+  const entries = await staffRosterDb.getByDate(date).catch(() => []);
+  rosterNames.value = new Set(entries.map(e => e.staff_name));
+}, { immediate: true });
 
 const CATEGORY_LABELS = STAFF_CATEGORY_LABELS;
 const CATEGORIES: StaffCategory[] = ["vs", "r", "sa", "or_nurse", "intern", "cross_train"];
@@ -144,9 +156,12 @@ const activeCategories = reactive<Record<StaffCategory, boolean>>({
 });
 
 const staffByCategory = computed(() => {
+  const hasRoster = rosterNames.value.size > 0;
   const map = {} as Record<StaffCategory, Staff[]>;
   for (const cat of CATEGORIES) {
-    map[cat] = staffStore.staffList.filter((s) => s.staff_category === cat);
+    let list = staffStore.staffList.filter(s => s.staff_category === cat);
+    if (hasRoster) list = list.filter(s => rosterNames.value.has(s.name));
+    map[cat] = list;
   }
   return map;
 });

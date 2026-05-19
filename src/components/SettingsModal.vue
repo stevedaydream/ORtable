@@ -190,6 +190,73 @@
             </div>
           </div>
 
+          <!-- PDF 代碼對應 -->
+          <div class="mt-6 border-t border-gray-700/60 pt-4">
+            <div class="flex items-center justify-between mb-2">
+              <div>
+                <span class="text-sm font-semibold text-gray-300">HIS PDF 代碼對應</span>
+                <p class="text-xs text-gray-500 mt-0.5">匯入 PDF 時，將房號代碼轉換為系統房間名稱（如 05 → OR5）</p>
+              </div>
+              <button class="btn-secondary text-xs" @click="addCodeMapRow">
+                <i class="fa-solid fa-plus mr-1"></i>新增
+              </button>
+            </div>
+            <div class="space-y-1.5">
+              <div v-for="(entry, i) in codeMapRows" :key="i" class="flex items-center gap-2">
+                <input v-model="entry.pdfCode" class="form-input flex-1 font-mono" placeholder="PDF 代碼（如 05）" />
+                <i class="fa-solid fa-arrow-right text-gray-600 text-[10px] shrink-0"></i>
+                <input v-model="entry.roomName" list="room-list-map" class="form-input flex-1" placeholder="系統房間（如 OR5）" />
+                <button class="text-gray-600 hover:text-red-400 text-xs shrink-0" @click="removeCodeMapRow(i)">
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+              <div v-if="codeMapRows.length === 0" class="text-xs text-gray-600 py-2 pl-1">
+                尚無對應規則，PDF 代碼將直接寫入
+              </div>
+            </div>
+            <datalist id="room-list-map">
+              <option v-for="r in roomsStore.rooms" :key="r.id" :value="r.name" />
+            </datalist>
+            <div class="flex items-center justify-end gap-2 mt-3">
+              <span v-if="codeMapSaveMsg" class="text-xs" :class="codeMapSaveMsg.ok ? 'text-green-400' : 'text-red-400'">
+                {{ codeMapSaveMsg.msg }}
+              </span>
+              <button class="btn-primary text-xs" @click="saveCodeMap">儲存對應規則</button>
+            </div>
+          </div>
+
+          <!-- 房間群組（一對多展開） -->
+          <div class="mt-4 border-t border-gray-700/60 pt-4">
+            <div class="flex items-center justify-between mb-2">
+              <div>
+                <span class="text-sm font-semibold text-gray-300">房間群組</span>
+                <p class="text-xs text-gray-500 mt-0.5">科別時段匯入時，群組名稱自動展開為多間實體房間</p>
+              </div>
+              <button class="btn-secondary text-xs" @click="addGroupRow">
+                <i class="fa-solid fa-plus mr-1"></i>新增
+              </button>
+            </div>
+            <div class="space-y-1.5">
+              <div v-for="(g, i) in roomGroupRows" :key="i" class="flex items-center gap-2">
+                <input v-model="g.name" class="form-input w-24 font-mono shrink-0" placeholder="群組名（如 局麻）" />
+                <i class="fa-solid fa-arrow-right text-gray-600 text-[10px] shrink-0"></i>
+                <input v-model="g.rooms" class="form-input flex-1 font-mono text-xs" placeholder="OR1, OR2, OR3（逗號分隔）" />
+                <button class="text-gray-600 hover:text-red-400 text-xs shrink-0" @click="removeGroupRow(i)">
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+              <div v-if="roomGroupRows.length === 0" class="text-xs text-gray-600 py-2 pl-1">
+                尚無群組，科別時段直接對應單一房間
+              </div>
+            </div>
+            <div class="flex items-center justify-end gap-2 mt-3">
+              <span v-if="roomGroupSaveMsg" class="text-xs" :class="roomGroupSaveMsg.ok ? 'text-green-400' : 'text-red-400'">
+                {{ roomGroupSaveMsg.msg }}
+              </span>
+              <button class="btn-primary text-xs" @click="saveRoomGroupRows">儲存群組設定</button>
+            </div>
+          </div>
+
           <!-- XLSX preview -->
           <div v-if="xlsxPreview.length > 0 || xlsxErrors.length > 0" class="mt-4 bg-gray-900/60 rounded-xl p-4 border" :class="xlsxPreview.length > 0 ? 'border-green-700/50' : 'border-red-900/50'">
             <div class="flex items-center justify-between mb-3">
@@ -558,6 +625,41 @@
           </div>
         </template>
 
+        <!-- ── 顯示設定 ──────────────────────────────────────────── -->
+        <template v-if="tab === 'display'">
+          <div class="max-w-sm space-y-6">
+            <div>
+              <label class="form-label mb-3">介面縮放比例</label>
+              <div class="flex items-center gap-4 mb-3">
+                <span class="text-2xl font-bold font-mono text-blue-300 w-16 text-center">
+                  {{ Math.round(zoomValue * 100) }}%
+                </span>
+                <div class="flex gap-1.5">
+                  <button
+                    v-for="preset in ZOOM_PRESETS" :key="preset"
+                    class="px-2 py-1 rounded text-xs transition-colors"
+                    :class="Math.round(zoomValue * 100) === Math.round(preset * 100)
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-700 text-gray-400 hover:bg-gray-600'"
+                    @click="applyZoom(preset)"
+                  >{{ Math.round(preset * 100) }}%</button>
+                </div>
+              </div>
+              <input
+                type="range"
+                v-model.number="zoomValue"
+                min="0.5" max="2.0" step="0.05"
+                class="w-full accent-blue-500"
+                @input="applyZoom(zoomValue)"
+              />
+              <div class="flex justify-between text-xs text-gray-600 mt-1">
+                <span>50%</span><span>100%</span><span>150%</span><span>200%</span>
+              </div>
+              <p class="text-xs text-gray-600 mt-3">調整後立即生效，重新啟動自動套用上次設定</p>
+            </div>
+          </div>
+        </template>
+
         <!-- ── 雲端設定 ──────────────────────────────────────────── -->
         <template v-if="tab === 'cloud'">
           <div class="max-w-lg space-y-4">
@@ -643,7 +745,7 @@ import { STAFF_CATEGORY_LABELS } from "../types";
 
 defineEmits<{ close: [] }>();
 
-const tab = ref<"rooms" | "staff" | "depts" | "selfpay" | "cloud" | "changelog">("rooms");
+const tab = ref<"rooms" | "staff" | "depts" | "selfpay" | "display" | "cloud" | "changelog">("rooms");
 const logger = useLogger();
 const updater = useUpdater();
 const appVersion = ref("—");
@@ -653,6 +755,7 @@ const TABS = [
   { key: "staff",     label: "人員管理", icon: "fa-users" },
   { key: "depts",     label: "科別管理", icon: "fa-layer-group" },
   { key: "selfpay",   label: "自費項目", icon: "fa-receipt" },
+  { key: "display",   label: "顯示設定", icon: "fa-display" },
   { key: "cloud",     label: "雲端設定", icon: "fa-cloud" },
   { key: "changelog", label: "更新紀錄", icon: "fa-clock-rotate-left" },
 ] as const;
@@ -669,7 +772,7 @@ const staffStore = useStaffStore();
 const deptRulesStore = useDeptRulesStore();
 const roomShiftsDb = useRoomShiftsDb();
 const staffRosterDb = useStaffRosterDb();
-const { getGasUrl, setGasUrl } = useSettings();
+const { getGasUrl, setGasUrl, getAppZoom, setAppZoom, getRoomCodeMap, setRoomCodeMap, getRoomGroups, setRoomGroups } = useSettings();
 
 // ── Dept Rules form ───────────────────────────────────────────────────────────
 const PRESET_COLORS = [
@@ -723,6 +826,89 @@ async function saveDept() {
   deptForm.open = false;
 }
 
+// ── Room Groups ───────────────────────────────────────────────────────────────
+interface RoomGroupRow { name: string; rooms: string; }
+const roomGroupRows    = ref<RoomGroupRow[]>([]);
+const roomGroupSaveMsg = ref<{ ok: boolean; msg: string } | null>(null);
+const roomGroupsMap    = ref<Record<string, string[]>>({});
+
+async function loadRoomGroups() {
+  try {
+    const raw = await getRoomGroups();
+    const map: Record<string, string[]> = JSON.parse(raw || "{}");
+    roomGroupsMap.value  = map;
+    roomGroupRows.value  = Object.entries(map).map(([name, rooms]) => ({ name, rooms: rooms.join(", ") }));
+  } catch { roomGroupRows.value = []; }
+}
+
+function addGroupRow() { roomGroupRows.value.push({ name: "", rooms: "" }); }
+function removeGroupRow(i: number) { roomGroupRows.value.splice(i, 1); }
+
+async function saveRoomGroupRows() {
+  const map: Record<string, string[]> = {};
+  for (const { name, rooms } of roomGroupRows.value) {
+    const k = name.trim();
+    const v = rooms.split(/[,，]/).map(r => r.trim()).filter(Boolean);
+    if (k && v.length) map[k] = v;
+  }
+  try {
+    await setRoomGroups(JSON.stringify(map));
+    roomGroupsMap.value = map;
+    roomGroupSaveMsg.value = { ok: true, msg: "✓ 已儲存" };
+    setTimeout(() => { roomGroupSaveMsg.value = null; }, 2000);
+  } catch (e) {
+    roomGroupSaveMsg.value = { ok: false, msg: `儲存失敗：${e}` };
+  }
+}
+
+function expandByGroups(entries: RoomScheduleEntry[]): RoomScheduleEntry[] {
+  const groups = roomGroupsMap.value;
+  if (!Object.keys(groups).length) return entries;
+  const result: RoomScheduleEntry[] = [];
+  for (const entry of entries) {
+    const physical = groups[entry.room_name];
+    if (physical && physical.length) {
+      for (const roomName of physical) {
+        result.push({ ...entry, id: 0, room_name: roomName });
+      }
+    } else {
+      result.push(entry);
+    }
+  }
+  return result;
+}
+
+// ── PDF Code Map ──────────────────────────────────────────────────────────────
+interface CodeMapRow { pdfCode: string; roomName: string; }
+const codeMapRows = ref<CodeMapRow[]>([]);
+const codeMapSaveMsg = ref<{ ok: boolean; msg: string } | null>(null);
+
+async function loadCodeMap() {
+  try {
+    const raw = await getRoomCodeMap();
+    const map: Record<string, string> = JSON.parse(raw || "{}");
+    codeMapRows.value = Object.entries(map).map(([pdfCode, roomName]) => ({ pdfCode, roomName }));
+  } catch { codeMapRows.value = []; }
+}
+
+function addCodeMapRow() { codeMapRows.value.push({ pdfCode: "", roomName: "" }); }
+function removeCodeMapRow(i: number) { codeMapRows.value.splice(i, 1); }
+
+async function saveCodeMap() {
+  const map: Record<string, string> = {};
+  for (const { pdfCode, roomName } of codeMapRows.value) {
+    const k = pdfCode.trim().toLowerCase();
+    if (k && roomName.trim()) map[k] = roomName.trim();
+  }
+  try {
+    await setRoomCodeMap(JSON.stringify(map));
+    codeMapSaveMsg.value = { ok: true, msg: "✓ 已儲存" };
+    setTimeout(() => { codeMapSaveMsg.value = null; }, 2000);
+  } catch (e) {
+    codeMapSaveMsg.value = { ok: false, msg: `儲存失敗：${e}` };
+  }
+}
+
 // ── Batch room add ────────────────────────────────────────────────────────────
 const batchRoom = reactive({ open: false, text: "", saving: false });
 
@@ -746,7 +932,7 @@ async function saveBatchRooms() {
   batchRoom.saving = true;
   try {
     for (const name of batchRoomNew.value) {
-      await roomsStore.add({ id: 0, name, display_order: roomsStore.rooms.length, is_backup: false });
+      await roomsStore.add({ id: 0, name, display_order: roomsStore.rooms.length, is_backup: false, is_active: true });
     }
     batchRoom.open = false;
     batchRoom.text = "";
@@ -837,15 +1023,16 @@ const roomForm = reactive({
   name: "",
   display_order: 0,
   is_backup: false,
+  is_active: true,
 });
 
 function startAddRoom() {
   batchRoom.open = false;
-  Object.assign(roomForm, { open: true, id: 0, name: "", display_order: roomsStore.rooms.length, is_backup: false });
+  Object.assign(roomForm, { open: true, id: 0, name: "", display_order: roomsStore.rooms.length, is_backup: false, is_active: true });
 }
 
 function startEditRoom(r: Room) {
-  Object.assign(roomForm, { open: true, id: r.id, name: r.name, display_order: r.display_order, is_backup: r.is_backup });
+  Object.assign(roomForm, { open: true, id: r.id, name: r.name, display_order: r.display_order, is_backup: r.is_backup, is_active: r.is_active });
 }
 
 async function saveRoom() {
@@ -855,6 +1042,7 @@ async function saveRoom() {
     name: roomForm.name.trim(),
     display_order: roomForm.display_order,
     is_backup: roomForm.is_backup,
+    is_active: roomForm.is_active,
   };
   if (roomForm.id) {
     await roomsStore.edit(payload);
@@ -985,14 +1173,31 @@ function parseXlsx(data: Uint8Array) {
   }
 }
 
+// Excel 時間可能是 "HH:MM" 字串，或 0.0~1.0 的日期序列小數
+function normalizeExcelTime(val: any): string {
+  if (!val && val !== 0) return "";
+  const s = String(val).trim();
+  const strMatch = s.match(/^(\d{1,2}):(\d{2})/);
+  if (strMatch) return `${strMatch[1].padStart(2, "0")}:${strMatch[2]}`;
+  const n = parseFloat(s);
+  if (!isNaN(n) && n >= 0 && n < 1) {
+    const mins = Math.round(n * 1440);
+    return `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+  }
+  return "";
+}
+
 function parseExcelDate(val: any): string | null {
   if (!val) return null;
   if (val instanceof Date) {
     return `${val.getFullYear()}-${String(val.getMonth() + 1).padStart(2, "0")}-${String(val.getDate()).padStart(2, "0")}`;
   }
   const s = String(val);
+  // YYYYMMDD (no separators, e.g. 20260501)
+  let m = s.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
   // YYYY/MM/DD or YYYY-MM-DD
-  let m = s.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  m = s.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
   if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
   // MM/DD/YYYY
   m = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
@@ -1013,23 +1218,24 @@ function fmtTs(ts: number): string {
 async function confirmXlsxImport() {
   if (xlsxPreview.value.length === 0) return;
   importSaving.value = true;
-  logger.addLog("info", `[XLSX] 開始寫入年度資料，總計 ${xlsxPreview.value.length} 筆...`);
-  
+  const expanded = expandByGroups(xlsxPreview.value);
+  logger.addLog("info", `[XLSX] 開始寫入年度資料，原始 ${xlsxPreview.value.length} 筆，展開後 ${expanded.length} 筆...`);
+
   try {
     // 1. 儲存時段資料 (後端已優化為自動跨月處理)
-    await roomShiftsDb.replaceByMonth("", xlsxPreview.value);
-    
-    // 2. 批次補建房間 (優化：先整理出不重複房間名，減少 DB 呼叫)
-    const uniqueRooms = [...new Set(xlsxPreview.value.map(e => e.room_name))];
+    await roomShiftsDb.replaceByMonth("", expanded);
+
+    // 2. 批次補建房間（使用展開後清單，避免建立虛擬群組名房間）
+    const uniqueRooms = [...new Set(expanded.map(e => e.room_name))];
     const currentRoomNames = new Set(roomsStore.rooms.map(r => r.name));
     for (const name of uniqueRooms) {
       if (!currentRoomNames.has(name)) {
-        await roomsStore.add({ id: 0, name, display_order: roomsStore.rooms.length, is_backup: false });
+        await roomsStore.add({ id: 0, name, display_order: roomsStore.rooms.length, is_backup: false, is_active: true });
       }
     }
 
     // 3. 批次補建科別規則 (優化：先整理出不重複科別)
-    const uniqueDepts = [...new Set(xlsxPreview.value.map(e => e.dept))].filter(Boolean);
+    const uniqueDepts = [...new Set(expanded.map(e => e.dept))].filter(Boolean);
     const currentDeptNames = new Set(deptRulesStore.rules.map(r => r.dept));
     for (const deptName of uniqueDepts) {
       if (!currentDeptNames.has(deptName)) {
@@ -1063,52 +1269,54 @@ const staffXlsxErrors  = ref<string[]>([]);
 const staffXlsxMonth   = ref("");
 const staffXlsxSaving  = ref(false);
 
-const STAFF_COL_ALIASES: Record<string, string> = {
-  date: "date", 日期: "date", 手術日期: "date",
-  name: "name", 姓名: "name", 人員: "name", 護理師: "name",
-  shift: "shift", 班別: "shift", 班別名稱: "shift",
-};
-
 // ... (省略中間 helper) ...
 
 function parseStaffXlsx(data: Uint8Array) {
   logger.addLog("info", "[Staff XLSX] 開始解析檔案...");
   try {
-    const wb   = XLSX.read(data, { type: "array", cellDates: true });
-    const sheetName = wb.SheetNames[0];
+    const wb = XLSX.read(data, { type: "array", cellDates: false });
+
+    // 優先使用「條列式班表」分頁
+    const sheetName = wb.SheetNames.find(n => n.includes("條列式")) ?? wb.SheetNames[0];
     logger.addLog("info", `[Staff XLSX] 讀取分頁: ${sheetName}`);
-    const ws   = wb.Sheets[sheetName];
+    const ws = wb.Sheets[sheetName];
     const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(ws, { raw: false, defval: "" });
 
     logger.addLog("info", `[Staff XLSX] 讀取到 ${rows.length} 行資料`);
     if (rows.length > 0) {
-      logger.addLog("info", `[Staff XLSX] 欄位範例: ${Object.keys(rows[0]).join(", ")}`);
+      logger.addLog("info", `[Staff XLSX] 欄位範例: ${Object.keys(rows[0]).slice(0, 8).join(", ")}`);
     }
 
     const entries: StaffRosterEntry[] = [];
     const errors: string[] = [];
+    const seen = new Set<string>();
 
     for (const row of rows) {
-      const norm: Record<string, string> = {};
-      for (const [k, v] of Object.entries(row)) {
-        const mapped = STAFF_COL_ALIASES[k.trim()];
-        if (mapped) norm[mapped] = String(v ?? "").trim();
-      }
-      const dateStr  = parseExcelDate(norm["date"]);
-      const name     = norm["name"]?.trim();
-      const shift    = norm["shift"]?.trim();
+      const name      = String(row["姓名"]    ?? "").trim();
+      const category  = String(row["類別"]    ?? "").trim();
+      const shiftName = String(row["類別名稱"] ?? "").trim();
+      const startDate = String(row["開始日期"] ?? "").trim();
 
-      if (!dateStr || !name || !shift) {
-        errors.push(`略過: ${JSON.stringify(row)}`);
-        continue;
-      }
-      entries.push({ id: 0, staff_name: name, date: dateStr, shift_name: shift });
+      if (!name || !shiftName || !startDate) continue;
+      if (category !== "S") continue; // 只取一般班別，排除加班(T)
+
+      const dateStr = parseExcelDate(startDate);
+      if (!dateStr) { errors.push(`日期格式錯誤: ${startDate}`); continue; }
+
+      const key = `${name}|${dateStr}`;
+      if (seen.has(key)) continue; // 同人同日只保留第一筆
+      seen.add(key);
+
+      const startTime = normalizeExcelTime(row["開始時間"]);
+      const endTime   = normalizeExcelTime(row["結束時間"]);
+
+      entries.push({ id: 0, staff_name: name, date: dateStr, shift_name: shiftName, start_time: startTime, end_time: endTime });
     }
 
     if (entries.length === 0) {
-      logger.addLog("error", "[Staff XLSX] 解析失敗：未找到符合格式的資料。請確認 Excel 標題包含：日期、姓名、班別。");
+      logger.addLog("error", "[Staff XLSX] 解析失敗：未找到符合格式的資料。請確認使用「條列式班表」分頁，並包含：姓名、類別、類別名稱、開始日期。");
     } else {
-      logger.addLog("info", `[Staff XLSX] 成功解析 ${entries.length} 筆人員班表`);
+      logger.addLog("info", `[Staff XLSX] 成功解析 ${entries.length} 筆人員班表（略過 ${errors.length} 筆）`);
     }
 
     staffXlsxMonth.value   = entries[0]?.date?.slice(0, 7) ?? "";
@@ -1123,10 +1331,25 @@ async function confirmStaffXlsxImport() {
   if (!staffXlsxMonth.value || staffXlsxPreview.value.length === 0) return;
   staffXlsxSaving.value = true;
   try {
+    // 1. 儲存月排班
     await staffRosterDb.replaceByMonth(staffXlsxMonth.value, staffXlsxPreview.value);
+
+    // 2. 補建人員主檔（roster 有但 staff 表沒有的人）
+    const existingNames = new Set(staffStore.staffList.map(s => s.name));
+    const newNames = [...new Set(staffXlsxPreview.value.map(e => e.staff_name))]
+      .filter(name => name && !existingNames.has(name));
+    for (const name of newNames) {
+      await staffStore.add({
+        id: 0, name,
+        role: "Circ", type: "nur", staff_category: "or_nurse",
+        unit: "", is_on_call: false, is_volunteer_extra: false,
+        today_shift_start: 0, next_day_shift_start: 0,
+      });
+    }
+
     staffXlsxPreview.value = [];
     staffXlsxErrors.value  = [];
-    alert("人員月排班匯入成功！");
+    alert(`人員月排班匯入成功！${newNames.length > 0 ? `\n自動新增 ${newNames.length} 位人員至主檔。` : ""}`);
   } catch (err) {
     logger.addLog("error", `[Staff XLSX] 匯入失敗: ${err}`);
     alert("匯入失敗，請檢查檔案格式");
@@ -1336,6 +1559,15 @@ async function confirmSelfPayImport() {
   }
 }
 
+// ── Display settings ──────────────────────────────────────────────────────────
+const ZOOM_PRESETS = [0.8, 1.0, 1.3, 1.5, 1.8];
+const zoomValue = ref(1.3);
+
+async function applyZoom(zoom: number) {
+  zoomValue.value = zoom;
+  await setAppZoom(zoom);
+}
+
 // ── Cloud settings ────────────────────────────────────────────────────────────
 const gasUrl = ref("");
 const cloudSaved = ref(false);
@@ -1348,8 +1580,11 @@ async function saveGasUrl() {
 
 onMounted(async () => {
   await Promise.all([roomsStore.load(), staffStore.load(), deptRulesStore.load(), loadSelfPay()]);
-  const url = await getGasUrl();
+  const [url, zoom] = await Promise.all([getGasUrl(), getAppZoom()]);
   if (url) gasUrl.value = url;
+  zoomValue.value = zoom;
   appVersion.value = await getVersion().catch(() => "—");
+  await loadCodeMap();
+  await loadRoomGroups();
 });
 </script>

@@ -16,9 +16,19 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            let win = app.get_webview_window("main");
             let handle = app.handle().clone();
             tauri::async_runtime::block_on(async move {
                 let pool = db::init(&handle).await.expect("DB 初始化失敗");
+                let zoom: f64 = db::settings::get(&pool, "app_zoom")
+                    .await
+                    .ok()
+                    .flatten()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(1.3);
+                if let Some(w) = win {
+                    let _ = w.set_zoom(zoom);
+                }
                 handle.manage(AppState { db: pool });
             });
             Ok(())
@@ -61,6 +71,12 @@ pub fn run() {
             // Settings
             commands::get_gas_url,
             commands::set_gas_url,
+            commands::get_app_zoom,
+            commands::set_app_zoom,
+            commands::get_room_code_map,
+            commands::set_room_code_map,
+            commands::get_room_groups,
+            commands::set_room_groups,
             // Staff Roster
             commands::get_staff_roster_by_date,
             commands::replace_staff_roster_by_month,

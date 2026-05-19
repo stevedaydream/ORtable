@@ -8,7 +8,19 @@
       "Bash(npx vite *)",
       "Bash(cargo build *)",
       "Bash(node *)",
-      "Bash(python *)"
+      "Bash(python *)",
+      "Bash(npm --version)",
+      "Bash(rustc --version)",
+      "Bash(cargo --version)",
+      "Bash(npx tauri *)",
+      "PowerShell(reg query *)",
+      "Bash(python3 *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\user\\\\OneDrive\\\\桌面\\\\project\\\\ORtable\\\\src\" -Recurse -Filter \"*.vue\")",
+      "Bash(Select-Object FullName)",
+      "Bash(grep -E \"\\\\.\\(ts|js|vue\\)$\")",
+      "Bash(npm run *)",
+      "Bash(npx tsc *)",
+      "Bash(cargo check *)"
     ]
   }
 }

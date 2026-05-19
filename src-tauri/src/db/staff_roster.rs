@@ -7,6 +7,8 @@ fn map_row(r: &sqlx::sqlite::SqliteRow) -> StaffRosterEntry {
         staff_name: r.get("staff_name"),
         date:       r.get("date"),
         shift_name: r.get("shift_name"),
+        start_time: r.get("start_time"),
+        end_time:   r.get("end_time"),
     }
 }
 
@@ -41,8 +43,9 @@ pub async fn replace_by_month(
 
     // 3. 批次寫入
     for e in entries {
-        sqlx::query("INSERT INTO staff_roster (staff_name, date, shift_name) VALUES (?,?,?)")
+        sqlx::query("INSERT INTO staff_roster (staff_name, date, shift_name, start_time, end_time) VALUES (?,?,?,?,?)")
             .bind(&e.staff_name).bind(&e.date).bind(&e.shift_name)
+            .bind(&e.start_time).bind(&e.end_time)
             .execute(&mut *tx).await.map_err(|e| e.to_string())?;
     }
     tx.commit().await.map_err(|e| e.to_string())

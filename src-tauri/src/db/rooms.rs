@@ -7,6 +7,7 @@ fn map_row(r: &sqlx::sqlite::SqliteRow) -> Room {
         name:          r.get("name"),
         display_order: r.get("display_order"),
         is_backup:     r.get::<i64, _>("is_backup") != 0,
+        is_active:     r.try_get::<i64, _>("is_active").unwrap_or(1) != 0,
     }
 }
 
@@ -19,9 +20,9 @@ pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Room>, String> {
 
 pub async fn create(pool: &SqlitePool, r: &Room) -> Result<Room, String> {
     let id = sqlx::query(
-        "INSERT INTO rooms (name, display_order, is_backup) VALUES (?,?,?)"
+        "INSERT INTO rooms (name, display_order, is_backup, is_active) VALUES (?,?,?,?)"
     )
-    .bind(&r.name).bind(r.display_order).bind(r.is_backup as i64)
+    .bind(&r.name).bind(r.display_order).bind(r.is_backup as i64).bind(r.is_active as i64)
     .execute(pool).await.map_err(|e| e.to_string())?
     .last_insert_rowid();
     fetch_one(pool, id).await
@@ -29,9 +30,9 @@ pub async fn create(pool: &SqlitePool, r: &Room) -> Result<Room, String> {
 
 pub async fn update(pool: &SqlitePool, r: &Room) -> Result<Room, String> {
     sqlx::query(
-        "UPDATE rooms SET name=?, display_order=?, is_backup=? WHERE id=?"
+        "UPDATE rooms SET name=?, display_order=?, is_backup=?, is_active=? WHERE id=?"
     )
-    .bind(&r.name).bind(r.display_order).bind(r.is_backup as i64).bind(r.id)
+    .bind(&r.name).bind(r.display_order).bind(r.is_backup as i64).bind(r.is_active as i64).bind(r.id)
     .execute(pool).await.map_err(|e| e.to_string())?;
     fetch_one(pool, r.id).await
 }

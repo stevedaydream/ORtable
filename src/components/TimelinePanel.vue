@@ -17,12 +17,56 @@
         @click="jumpToToday"
       >今天</button>
       <div class="flex-1" />
-      <button
-        class="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-800 transition-colors shrink-0"
-        @click="reload"
-      >
-        <i class="fa-solid fa-arrows-rotate text-[10px]"></i>手動重整
-      </button>
+      <template v-if="!editMode">
+        <button
+          class="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-800 transition-colors shrink-0"
+          @click="reload"
+        >
+          <i class="fa-solid fa-arrows-rotate text-[10px]"></i>手動重整
+        </button>
+        <button
+          class="text-xs text-blue-400 hover:text-blue-200 flex items-center gap-1.5 px-2 py-1 rounded border border-blue-800 hover:border-blue-600 hover:bg-blue-900/30 transition-colors shrink-0"
+          @click="enterEditMode"
+        >
+          <i class="fa-solid fa-pen-to-square text-[10px]"></i>編輯時段
+        </button>
+      </template>
+      <template v-else>
+        <span class="text-[10px] text-blue-400 flex items-center gap-1 shrink-0">
+          <i class="fa-solid fa-pen-to-square animate-pulse"></i>時段編輯中
+        </span>
+        <button
+          class="text-xs text-gray-400 hover:text-gray-200 px-2 py-1 rounded border border-gray-600 hover:border-gray-500 hover:bg-gray-800 transition-colors shrink-0"
+          @click="cancelEditMode"
+        >取消</button>
+        <button
+          class="text-xs text-white font-bold px-3 py-1 rounded bg-blue-700 hover:bg-blue-600 transition-colors shrink-0"
+          @click="saveEditMode"
+        >儲存</button>
+      </template>
+    </div>
+
+    <!-- Edit mode banner -->
+    <div v-if="editMode" class="shrink-0 border-b px-3 py-1.5 flex items-center gap-2 text-xs transition-colors"
+         :class="selectedShift ? 'bg-blue-900/60 border-blue-600/60 text-blue-200' : 'bg-blue-950/70 border-blue-700/50 text-blue-300'">
+      <template v-if="!selectedShift">
+        <i class="fa-solid fa-hand-pointer text-blue-400 text-[10px]"></i>
+        點擊科別色塊選取，再點擊目標房間欄移動
+      </template>
+      <template v-else>
+        <i class="fa-solid fa-circle-dot text-blue-300 text-[10px] animate-pulse"></i>
+        已選取
+        <span class="font-bold text-white px-1.5 py-0.5 rounded text-[10px]" :class="deptColor(selectedShift.dept)">
+          {{ selectedShift.dept }}
+        </span>
+        <span class="text-blue-400 font-mono text-[10px]">{{ fmtTs(selectedShift.start_time) }}–{{ fmtTs(selectedShift.end_time) }}</span>
+        → 點擊目標房間欄移入
+        <button class="ml-2 text-gray-500 hover:text-gray-300 text-[10px]" @click="selectedShift = null">取消選取</button>
+      </template>
+      <div class="flex-1" />
+      <span v-if="stagedShifts.length > 0" class="text-amber-400 text-[10px]">
+        <i class="fa-solid fa-triangle-exclamation mr-1"></i>{{ stagedShifts.length }} 個時段在暫存區
+      </span>
     </div>
 
     <!-- Empty state -->
@@ -63,17 +107,31 @@
             :style="{ height: HEADER_H + 'px' }"
             class="sticky top-0 z-10 border-b flex flex-col overflow-hidden relative"
             :class="[
-              room.is_backup ? 'bg-orange-900/50 border-orange-700/50' : 'bg-gray-800 border-gray-700',
-              dragOverRoom === room.name ? 'ring-2 ring-inset ring-blue-500/60' : '',
+              !room.is_active ? 'bg-gray-900 border-gray-800' :
+                room.is_backup ? 'bg-orange-900/50 border-orange-700/50' : 'bg-gray-800 border-gray-700',
+              room.is_active && dragOverRoom === room.name ? 'ring-2 ring-inset ring-blue-500/60' : '',
             ]"
           >
-            <!-- 第一行：房間名稱 -->
-            <div class="flex items-center justify-center gap-1 px-2 shrink-0" style="height: 32px;">
+            <!-- 第一行：房間名稱 + 啟用開關 -->
+            <div class="flex items-center gap-1 px-2 shrink-0" style="height: 32px;">
               <i v-if="room.is_backup" class="fa-solid fa-circle-exclamation text-orange-400 text-[10px] shrink-0"></i>
-              <span class="text-xs font-semibold truncate"
-                :class="room.is_backup ? 'text-orange-300' : 'text-gray-200'"
+              <span class="flex-1 text-xs font-semibold truncate"
+                :class="!room.is_active ? 'text-gray-600' : room.is_backup ? 'text-orange-300' : 'text-gray-200'"
               >{{ room.name }}</span>
-              <span v-if="room.is_backup" class="text-[9px] text-orange-500 shrink-0">備用</span>
+              <span v-if="room.is_backup && room.is_active" class="text-[9px] text-orange-500 shrink-0">備用</span>
+              <span v-if="!room.is_active" class="text-[9px] text-gray-600 shrink-0">停用</span>
+              <!-- Switch -->
+              <button
+                class="relative inline-flex h-3.5 w-6 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none"
+                :class="room.is_active ? 'bg-green-500' : 'bg-gray-600'"
+                :title="room.is_active ? '點擊停用此房間' : '點擊啟用此房間'"
+                @click.stop="toggleRoomActive(room)"
+              >
+                <span
+                  class="pointer-events-none inline-block h-2.5 w-2.5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                  :class="room.is_active ? 'translate-x-2.5' : 'translate-x-0'"
+                />
+              </button>
             </div>
             <!-- 第二行：今日人員名牌 -->
             <div class="flex flex-wrap gap-0.5 px-1.5 overflow-hidden" style="height: 36px;">
@@ -114,7 +172,7 @@
             </div>
             <!-- 拖曳時 header overlay（確保 header 區域也可接受 drop） -->
             <div
-              v-if="isDragging"
+              v-if="room.is_active && isDragging"
               class="absolute inset-0 z-20"
               @dragover.prevent="dragOverRoom = room.name"
               @dragleave="onDragLeave(room.name)"
@@ -126,7 +184,7 @@
           <div
             class="relative transition-colors"
             :style="{ height: TOTAL_PX + 'px' }"
-            :class="dragOverRoom === room.name ? 'bg-blue-500/10' : ''"
+            :class="room.is_active && dragOverRoom === room.name ? 'bg-blue-500/10' : ''"
           >
             <!-- 整點格線 -->
             <div
@@ -138,24 +196,56 @@
             <!-- 科別色塊 -->
             <div
               v-for="shift in shiftsForRoom(room.name)" :key="shift.id"
-              class="absolute left-1 right-1 rounded px-1.5 overflow-hidden cursor-default opacity-40"
-              :class="deptColor(shift.dept)"
+              class="absolute left-1 right-1 rounded px-1.5 overflow-hidden select-none transition-all z-[9]"
+              :class="[
+                deptColor(shift.dept),
+                editMode
+                  ? selectedShift?.id === shift.id
+                    ? 'opacity-100 ring-2 ring-white cursor-pointer scale-[1.03]'
+                    : 'opacity-75 cursor-pointer hover:opacity-95 hover:ring-1 hover:ring-white/40'
+                  : 'opacity-50 pointer-events-none',
+              ]"
               :style="blockStyle(shift)"
-              :title="`${shift.dept}　${fmtTs(shift.start_time)}–${fmtTs(shift.end_time)}`"
+              :title="editMode ? (selectedShift?.id === shift.id ? '已選取，點擊目標房間欄移動' : `點擊選取 ${shift.dept}，右鍵快速指派`) : undefined"
+              @click.stop="editMode && onShiftBlockClick(shift)"
+              @contextmenu.prevent="editMode && onShiftRightClick($event, shift)"
             >
               <div class="truncate text-[10px] font-medium leading-tight pt-0.5">{{ shift.dept }}</div>
+              <div class="truncate text-[9px] opacity-70 leading-none">{{ fmtTs(shift.start_time) }}–{{ fmtTs(shift.end_time) }}</div>
             </div>
 
             <!-- 病患卡片渲染 (Scheduled Tasks) -->
             <PatientCard
               v-for="task in scheduledTasksForRoom(room.name)" :key="task.id"
-              class="absolute left-1 right-1 cursor-pointer"
+              class="absolute left-1 right-1 cursor-pointer transition-opacity"
+              :class="editMode ? 'opacity-10 pointer-events-none' : ''"
               :task="task"
               mode="timeline"
               :style="taskBlockStyle(task)"
               @contextmenu="onTaskRightClick($event, task)"
               @click="detailTaskId = task.id"
             />
+
+            <!-- Edit Mode：點選移入 overlay -->
+            <div
+              v-if="editMode && selectedShift"
+              class="absolute inset-0 z-[8] transition-colors"
+              :class="selectedShift.room_name === room.name
+                ? 'bg-amber-500/10 cursor-not-allowed'
+                : 'bg-blue-500/8 hover:bg-blue-500/20 cursor-pointer'"
+              @click="onRoomColumnClick(room.name)"
+            >
+              <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <span
+                  v-if="selectedShift.room_name !== room.name"
+                  class="text-[10px] text-blue-300 bg-blue-950/90 border border-blue-700/60 px-2 py-1 rounded shadow"
+                >點擊移入此房間</span>
+                <span
+                  v-else
+                  class="text-[10px] text-amber-400 bg-amber-950/90 border border-amber-700/60 px-2 py-1 rounded shadow"
+                >目前位置</span>
+              </div>
+            </div>
 
             <!-- 現在線 -->
             <div
@@ -164,9 +254,19 @@
               :style="{ top: nowY + 'px' }"
             />
 
+            <!-- 停用 overlay（蓋住整欄，阻擋所有互動） -->
+            <div
+              v-if="!room.is_active"
+              class="absolute inset-0 z-30 bg-gray-900/70 flex items-start justify-center pt-8 pointer-events-auto"
+            >
+              <span class="text-[10px] text-gray-600 bg-gray-900/80 px-2 py-1 rounded select-none">
+                <i class="fa-solid fa-ban mr-1"></i>房間已停用
+              </span>
+            </div>
+
             <!-- 拖曳時透明 overlay -->
             <div
-              v-if="isDragging && dragType !== 'assignment'"
+              v-if="room.is_active && isDragging && dragType !== 'assignment'"
               class="absolute inset-0 z-20"
               @dragover.prevent="dragOverRoom = room.name"
               @dragleave="onDragLeave(room.name)"
@@ -177,13 +277,48 @@
                 class="absolute inset-0 bg-blue-500/10 flex items-center justify-center pointer-events-none"
               >
                 <span class="text-[10px] text-blue-300 bg-blue-950/90 px-2 py-1 rounded">
-                  {{ dragType === "task" ? "排入此房間" : "指派人員" }}
+                  {{ dragType === "task" ? "排入此房間" : dragType === "shift" ? "移動至此房間" : "指派人員" }}
                 </span>
               </div>
             </div>
           </div>
         </div>
 
+      </div>
+    </div>
+
+    <!-- Conflict Staging Area -->
+    <div
+      v-show="stagedShifts.length > 0 || (isDragging && dragType === 'shift')"
+      class="shrink-0 border-t border-gray-700 transition-colors"
+      :class="stagingDragOver ? 'bg-amber-500/10' : ''"
+      @dragover.prevent="stagingDragOver = true"
+      @dragleave="stagingDragOver = false"
+      @drop.prevent="onDropToStaging"
+    >
+      <div class="flex items-center gap-2 px-3 py-1.5">
+        <i class="fa-solid fa-triangle-exclamation text-amber-400 text-[10px]"></i>
+        <span class="text-[10px] font-semibold text-amber-400">衝突暫存區</span>
+        <span class="text-[10px] text-gray-600 ml-1">{{ stagedShifts.length }}</span>
+        <div class="flex-1" />
+        <span class="text-[9px] text-gray-600">可從房間拖入暫存，或從此拖回房間</span>
+      </div>
+      <div class="px-3 pb-2 min-h-[28px] flex flex-wrap gap-1.5">
+        <span
+          v-for="s in stagedShifts" :key="s.id"
+          class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] cursor-grab active:cursor-grabbing select-none"
+          :class="deptColor(s.dept)"
+          draggable="true"
+          @dragstart="onStagedShiftDragStart($event, s)"
+          @dragend="onShiftDragEnd"
+          :title="`${s.dept} ${fmtTs(s.start_time)}–${fmtTs(s.end_time)}（拖回房間）`"
+        >
+          {{ s.dept }} {{ fmtTs(s.start_time) }}–{{ fmtTs(s.end_time) }}
+          <button class="ml-0.5 hover:text-red-300 leading-none" @click.stop="removeStaged(s.id)">×</button>
+        </span>
+        <span v-if="stagedShifts.length === 0 && isDragging && dragType === 'shift'" class="text-[10px] text-amber-500/50 italic self-center">
+          放開以暫存此時段
+        </span>
       </div>
     </div>
 
@@ -213,6 +348,109 @@
           <div class="flex gap-2">
             <button class="flex-1 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-300" @click="dropState = null">取消</button>
             <button class="flex-1 py-1.5 text-xs rounded bg-blue-700 hover:bg-blue-600 text-white font-bold" @click="confirmDrop">確認指派</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Room Disable Confirmation Modal -->
+    <Teleport to="body">
+      <div
+        v-if="disableModal.open"
+        class="fixed inset-0 bg-black/60 z-[9996] flex items-center justify-center"
+        @mousedown.self="disableModal.open = false"
+      >
+        <div class="bg-gray-800 border border-gray-600 rounded-xl shadow-2xl p-4 min-w-[300px] max-w-sm">
+          <div class="flex items-center gap-2 mb-3">
+            <i class="fa-solid fa-ban text-gray-400"></i>
+            <span class="text-sm font-semibold text-gray-200">停用 {{ disableModal.room?.name }}</span>
+          </div>
+          <p class="text-xs text-gray-400 mb-3">
+            此房間目前有
+            <span class="text-amber-300 font-semibold">{{ disableModal.affectedShifts.length }}</span>
+            個科別時段，停用後要如何處理？
+          </p>
+          <div class="space-y-1 mb-4 max-h-32 overflow-y-auto">
+            <div
+              v-for="s in disableModal.affectedShifts" :key="s.id"
+              class="flex items-center gap-2 px-2 py-1 rounded text-[10px]"
+              :class="deptColor(s.dept)"
+            >
+              <span class="font-medium">{{ s.dept }}</span>
+              <span class="opacity-70 font-mono ml-auto">{{ fmtTs(s.start_time) }}–{{ fmtTs(s.end_time) }}</span>
+            </div>
+          </div>
+          <div class="flex flex-col gap-2">
+            <button
+              class="flex items-center gap-2 w-full py-2 px-3 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-200 transition-colors text-left"
+              @click="confirmDisableKeep"
+            >
+              <i class="fa-solid fa-clock-rotate-left text-[10px] text-gray-400"></i>
+              保留時段（啟用後恢復）
+            </button>
+            <button
+              class="flex items-center gap-2 w-full py-2 px-3 text-xs rounded bg-amber-800 hover:bg-amber-700 text-amber-200 transition-colors text-left"
+              @click="confirmDisableStage"
+            >
+              <i class="fa-solid fa-box-archive text-[10px]"></i>
+              移至暫存區
+            </button>
+            <button
+              class="w-full py-2 px-3 text-xs rounded bg-transparent hover:bg-gray-700 text-gray-500 transition-colors"
+              @click="disableModal.open = false"
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Conflict Resolution Modal -->
+    <Teleport to="body">
+      <div
+        v-if="conflictModal.open"
+        class="fixed inset-0 bg-black/60 z-[9996] flex items-center justify-center"
+        @mousedown.self="conflictModal.open = false"
+      >
+        <div class="bg-gray-800 border border-amber-700/50 rounded-xl shadow-2xl p-4 min-w-[280px] max-w-sm">
+          <div class="flex items-center gap-2 mb-3">
+            <i class="fa-solid fa-triangle-exclamation text-amber-400"></i>
+            <span class="text-sm font-semibold text-gray-200">時段衝突</span>
+          </div>
+          <div class="text-xs text-gray-400 space-y-1 mb-4">
+            <div>
+              拖入：<span class="text-gray-200 font-medium">{{ conflictModal.draggingShift?.dept }}</span>
+              <span class="text-gray-500 ml-1 font-mono">{{ conflictModal.draggingShift ? fmtTs(conflictModal.draggingShift.start_time) + '–' + fmtTs(conflictModal.draggingShift.end_time) : '' }}</span>
+            </div>
+            <div>
+              衝突：<span class="text-amber-300 font-medium">{{ conflictModal.conflictShift?.dept }}</span>
+              <span class="text-gray-500 ml-1 font-mono">{{ conflictModal.conflictShift ? fmtTs(conflictModal.conflictShift.start_time) + '–' + fmtTs(conflictModal.conflictShift.end_time) : '' }}</span>
+              <span class="text-gray-600 ml-1">@ {{ conflictModal.targetRoom }}</span>
+            </div>
+          </div>
+          <div class="flex flex-col gap-2">
+            <button
+              v-if="!conflictModal.fromStaging"
+              class="flex items-center gap-2 w-full py-2 px-3 text-xs rounded bg-blue-800 hover:bg-blue-700 text-blue-200 font-medium transition-colors"
+              @click="confirmSwap"
+            >
+              <i class="fa-solid fa-arrows-rotate text-[10px]"></i>
+              交換房間（{{ conflictModal.conflictShift?.dept }} → {{ conflictModal.sourceRoom }}）
+            </button>
+            <button
+              class="flex items-center gap-2 w-full py-2 px-3 text-xs rounded bg-amber-800 hover:bg-amber-700 text-amber-200 font-medium transition-colors"
+              @click="stageConflict"
+            >
+              <i class="fa-solid fa-box-archive text-[10px]"></i>
+              移至暫存區（{{ conflictModal.conflictShift?.dept }} → 暫存）
+            </button>
+            <button
+              class="w-full py-2 px-3 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-400 transition-colors"
+              @click="conflictModal.open = false"
+            >
+              取消
+            </button>
           </div>
         </div>
       </div>
@@ -295,6 +533,44 @@
         取消指派
       </button>
     </ContextMenu>
+
+    <!-- Shift Block Context Menu -->
+    <ContextMenu
+      :show="shiftMenu.open"
+      :x="shiftMenu.x"
+      :y="shiftMenu.y"
+      :width="200"
+      @close="shiftMenu.open = false"
+    >
+      <div class="px-3 py-1.5 text-[10px] text-gray-500 font-semibold border-b border-gray-700">
+        移動
+        <span class="px-1 rounded ml-1" :class="shiftMenu.shift ? deptColor(shiftMenu.shift.dept) : ''">
+          {{ shiftMenu.shift?.dept }}
+        </span>
+        <span class="text-gray-600 font-mono ml-1">{{ shiftMenu.shift ? fmtTs(shiftMenu.shift.start_time) + '–' + fmtTs(shiftMenu.shift.end_time) : '' }}</span>
+      </div>
+      <button
+        v-for="r in rooms" :key="r.id"
+        class="flex items-center gap-2 w-full px-3 py-1.5 text-xs transition-colors text-left"
+        :class="shiftMenu.shift?.room_name === r.name
+          ? 'text-gray-600 cursor-default'
+          : 'text-gray-300 hover:bg-gray-700'"
+        :disabled="shiftMenu.shift?.room_name === r.name"
+        @click="assignShiftViaMenu(r.name)"
+      >
+        <i class="fa-solid fa-door-open text-[9px]" :class="shiftMenu.shift?.room_name === r.name ? 'text-gray-700' : 'text-gray-500'"></i>
+        {{ r.name }}
+        <span v-if="shiftMenu.shift?.room_name === r.name" class="ml-auto text-[9px] text-gray-600">目前</span>
+        <span v-if="r.is_backup" class="ml-auto text-[9px] text-orange-500">備用</span>
+      </button>
+      <div class="border-t border-gray-700/60 my-0.5" />
+      <button
+        class="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-amber-400 hover:bg-amber-900/30 transition-colors text-left"
+        @click="stageShiftViaMenu"
+      >
+        <i class="fa-solid fa-box-archive text-[9px]"></i>移至暫存區
+      </button>
+    </ContextMenu>
   </div>
 </template>
 
@@ -313,6 +589,77 @@ import SelfPayPickerModal from "./SelfPayPickerModal.vue";
 
 const detailTaskId = ref<number | null>(null);
 const selfPayTaskId = ref<number | null>(null);
+
+// ── 時段編輯模式 ──────────────────────────────────────────────────────────────────
+const editMode      = ref(false);
+const preEditShifts = ref<RoomScheduleEntry[]>([]);
+const selectedShift = ref<RoomScheduleEntry | null>(null);
+
+function enterEditMode() {
+  preEditShifts.value  = shifts.value.map(s => ({ ...s }));
+  stagedShifts.value   = [];
+  selectedShift.value  = null;
+  editMode.value       = true;
+}
+
+function cancelEditMode() {
+  shifts.value         = preEditShifts.value;
+  stagedShifts.value   = [];
+  selectedShift.value  = null;
+  editMode.value       = false;
+  isDragging.value     = false;
+  dragType.value       = null;
+  draggingShift.value  = null;
+}
+
+async function saveEditMode() {
+  await saveShifts();
+  selectedShift.value = null;
+  editMode.value      = false;
+}
+
+function onShiftBlockClick(shift: RoomScheduleEntry) {
+  shiftMenu.open      = false;
+  selectedShift.value = selectedShift.value?.id === shift.id ? null : { ...shift };
+}
+
+function onRoomColumnClick(roomName: string) {
+  const sel = selectedShift.value;
+  if (!sel) return;
+  selectedShift.value = null;
+  if (sel.room_name === roomName) return;
+  handleShiftMove(sel, roomName, false);
+}
+
+// ── 科別色塊右鍵選單 ────────────────────────────────────────────────────────────
+const shiftMenu = reactive({ open: false, x: 0, y: 0, shift: null as RoomScheduleEntry | null });
+
+function onShiftRightClick(e: MouseEvent, shift: RoomScheduleEntry) {
+  selectedShift.value = null;
+  shiftMenu.open  = true;
+  shiftMenu.x     = e.clientX;
+  shiftMenu.y     = e.clientY;
+  shiftMenu.shift = { ...shift };
+}
+
+function assignShiftViaMenu(roomName: string) {
+  const shift = shiftMenu.shift;
+  shiftMenu.open = false;
+  if (!shift || shift.room_name === roomName) return;
+  handleShiftMove(shift, roomName, false);
+}
+
+function stageShiftViaMenu() {
+  const shift = shiftMenu.shift;
+  shiftMenu.open = false;
+  if (!shift) return;
+  const idx = shifts.value.findIndex(s => s.id === shift.id);
+  if (idx !== -1) {
+    stagedShifts.value = [...stagedShifts.value, { ...shifts.value[idx] }];
+    shifts.value       = shifts.value.filter((_, i) => i !== idx);
+    saveShifts();
+  }
+}
 
 const emit = defineEmits<{ "date-changed": [date: string] }>();
 
@@ -503,12 +850,72 @@ function scrollToNow() {
 }
 
 async function reload() {
+  editMode.value      = false;
+  selectedShift.value = null;
+  isDragging.value    = false;
+  dragType.value      = null;
+  draggingShift.value = null;
+  stagedShifts.value  = [];
   [shifts.value] = await Promise.all([
     roomShiftsDb.getByDate(todayStr.value),
     assignmentsStore.load(todayStr.value),
     loadDeptColors(),
   ]);
   updateNow();
+}
+
+// ── 房間啟用切換 ─────────────────────────────────────────────────────────────────
+const disableModal = reactive<{
+  open: boolean;
+  room: Room | null;
+  affectedShifts: RoomScheduleEntry[];
+}>({ open: false, room: null, affectedShifts: [] });
+
+async function toggleRoomActive(room: Room) {
+  if (room.is_active) {
+    // 停用前檢查當日是否有科別時段
+    const affected = shiftsForRoom(room.name);
+    if (affected.length > 0) {
+      disableModal.room          = room;
+      disableModal.affectedShifts = [...affected];
+      disableModal.open          = true;
+      return;
+    }
+  }
+  await applyDisableRoom(room, false);
+}
+
+async function applyDisableRoom(room: Room, stageShifts: boolean) {
+  try {
+    if (stageShifts) {
+      stagedShifts.value = [...stagedShifts.value, ...disableModal.affectedShifts];
+      shifts.value       = shifts.value.filter(s => s.room_name !== room.name);
+      await saveShifts();
+    }
+    await roomsStore.edit({ ...room, is_active: false });
+    const toUnschedule = tasksStore.tasks.filter(
+      t => t.expected_room === room.name && t.status === 'scheduled'
+    );
+    for (const task of toUnschedule) {
+      await tasksStore.edit({ ...task, status: 'waiting', expected_room: '', scheduled_at: null });
+    }
+  } catch (e) {
+    console.error("[Timeline] 切換房間狀態失敗:", e);
+  } finally {
+    disableModal.open = false;
+    disableModal.room = null;
+    disableModal.affectedShifts = [];
+  }
+}
+
+async function confirmDisableKeep() {
+  if (!disableModal.room) return;
+  await applyDisableRoom(disableModal.room, false);
+}
+
+async function confirmDisableStage() {
+  if (!disableModal.room) return;
+  await applyDisableRoom(disableModal.room, true);
 }
 
 // ── 拖放 ─────────────────────────────────────────────────────────────────────
@@ -521,6 +928,125 @@ interface DropState {
 }
 const dropState = ref<DropState | null>(null);
 
+// ── 科別時段拖曳 ────────────────────────────────────────────────────────────────
+const draggingShift   = ref<RoomScheduleEntry | null>(null);
+const stagedShifts    = ref<RoomScheduleEntry[]>([]);
+const stagingDragOver = ref(false);
+
+interface ConflictModalState {
+  open: boolean;
+  draggingShift: RoomScheduleEntry | null;
+  conflictShift: RoomScheduleEntry | null;
+  targetRoom: string;
+  sourceRoom: string | null;
+  fromStaging: boolean;
+}
+const conflictModal = reactive<ConflictModalState>({
+  open: false, draggingShift: null, conflictShift: null,
+  targetRoom: "", sourceRoom: null, fromStaging: false,
+});
+
+function onShiftDragEnd() {
+  isDragging.value    = false;
+  dragType.value      = null;
+  draggingShift.value = null;
+}
+function onStagedShiftDragStart(e: DragEvent, shift: RoomScheduleEntry) {
+  isDragging.value    = true;
+  dragType.value      = "shift";
+  draggingShift.value = shift;
+  e.dataTransfer!.effectAllowed = "move";
+  e.dataTransfer!.setData("text/plain", JSON.stringify({ type: "shift", id: shift.id, fromStaging: true }));
+}
+
+async function saveShifts() {
+  try {
+    await roomShiftsDb.replaceByDate(todayStr.value, shifts.value);
+  } catch (e) {
+    console.error("[Timeline] 儲存科別時段失敗:", e);
+  }
+}
+
+function applyShiftMove(shift: RoomScheduleEntry, targetRoom: string, fromStaging: boolean) {
+  if (fromStaging) {
+    stagedShifts.value = stagedShifts.value.filter(s => s.id !== shift.id);
+    shifts.value = [...shifts.value, { ...shift, room_name: targetRoom }];
+  } else {
+    shifts.value = shifts.value.map(s => s.id === shift.id ? { ...s, room_name: targetRoom } : s);
+  }
+}
+
+function handleShiftMove(shift: RoomScheduleEntry, targetRoom: string, fromStaging: boolean) {
+  if (!fromStaging && shift.room_name === targetRoom) return;
+  const conflicts = shifts.value.filter(s =>
+    s.room_name === targetRoom &&
+    s.id !== shift.id &&
+    s.start_time < shift.end_time &&
+    s.end_time > shift.start_time
+  );
+  if (conflicts.length === 0) {
+    applyShiftMove(shift, targetRoom, fromStaging);
+    saveShifts();
+  } else {
+    Object.assign(conflictModal, {
+      open: true,
+      draggingShift: { ...shift },
+      conflictShift: { ...conflicts[0] },
+      targetRoom,
+      sourceRoom: fromStaging ? null : shift.room_name,
+      fromStaging,
+    });
+  }
+}
+
+function confirmSwap() {
+  const { draggingShift: ds, conflictShift: cs, targetRoom, sourceRoom } = conflictModal;
+  if (!ds || !cs || !sourceRoom) return;
+  shifts.value = shifts.value.map(s => {
+    if (s.id === ds.id) return { ...s, room_name: targetRoom };
+    if (s.id === cs.id) return { ...s, room_name: sourceRoom };
+    return s;
+  });
+  saveShifts();
+  conflictModal.open = false;
+}
+
+function stageConflict() {
+  const { draggingShift: ds, conflictShift: cs, targetRoom, fromStaging } = conflictModal;
+  if (!ds || !cs) return;
+  const csEntry = shifts.value.find(s => s.id === cs.id);
+  if (csEntry) {
+    stagedShifts.value = [...stagedShifts.value, { ...csEntry }];
+    shifts.value = shifts.value.filter(s => s.id !== cs.id);
+  }
+  applyShiftMove(ds, targetRoom, fromStaging);
+  saveShifts();
+  conflictModal.open = false;
+}
+
+function onDropToStaging(e: DragEvent) {
+  stagingDragOver.value = false;
+  const raw = e.dataTransfer?.getData("text/plain");
+  if (!raw) return;
+  try {
+    const data = JSON.parse(raw) as { type: string; id?: number; fromStaging?: boolean };
+    if (data.type === "shift" && data.id != null && !data.fromStaging) {
+      const idx = shifts.value.findIndex(s => s.id === data.id);
+      if (idx !== -1) {
+        stagedShifts.value = [...stagedShifts.value, { ...shifts.value[idx] }];
+        shifts.value = shifts.value.filter((_, i) => i !== idx);
+        saveShifts();
+      }
+    }
+  } catch {
+    console.error("[Timeline] staging drop 解析失敗");
+  }
+}
+
+function removeStaged(id: number) {
+  stagedShifts.value = stagedShifts.value.filter(s => s.id !== id);
+}
+
 function onDragLeave(roomName: string) {
   if (dragOverRoom.value === roomName) dragOverRoom.value = null;
 }
@@ -530,11 +1056,17 @@ function onDrop(e: DragEvent, roomName: string) {
   const raw = e.dataTransfer?.getData("text/plain");
   if (!raw) return;
   try {
-    const data = JSON.parse(raw) as { type: string; name?: string; id?: number };
+    const data = JSON.parse(raw) as { type: string; name?: string; id?: number; fromStaging?: boolean };
     if (data.type === "staff" && data.name) {
       dropState.value = { staffName: data.name, roomName, role: "Circ" };
     } else if (data.type === "task" && data.id != null) {
       assignTaskToRoom(data.id, roomName, e.clientY);
+    } else if (data.type === "shift" && data.id != null) {
+      const fromStaging = !!data.fromStaging;
+      const shift = fromStaging
+        ? stagedShifts.value.find(s => s.id === data.id)
+        : shifts.value.find(s => s.id === data.id);
+      if (shift) handleShiftMove(shift, roomName, fromStaging);
     }
   } catch {
     console.error("[Timeline] drop 資料解析失敗");
