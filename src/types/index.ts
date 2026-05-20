@@ -106,6 +106,7 @@ export interface RoomScheduleEntry {
   start_time: number;  // unix timestamp
   end_time: number;    // unix timestamp
   notes: string;
+  is_emergency: boolean;
 }
 
 export interface DeptRule {

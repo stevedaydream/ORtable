@@ -457,10 +457,12 @@ P4 — UX 小型改善：
 
 Bug fixes（本 Phase）：
   TimelinePanel drag-drop：assignTaskToRoom() 改從 drop event clientY 計算 scheduled_at，
-    不再固定設為 Date.now()。dropYToTime(clientY) = dayStart + (clientY−rect.top+scrollTop−HEADER_H)/PX_PER_HOUR×3600。
+    不再固定設為 Date.now()。dropYToTime(clientY) = dayStart + (clientY/zoom−rect.top+scrollTop−HEADER_H)/PX_PER_HOUR×3600。
+    （clientY 需除以 zoom，因 WebView2 set_zoom 下 clientY 為物理像素，rect.top 為 CSS 像素）
   QuickAssignModal：confirm() 移除 emit("close")，避免 modal = "emergency" 被後續 close 覆蓋成 null。
   useDatabase.ts：get_room_recommendation invoke 參數改為 estMins（camelCase），配合 Tauri v2 自動轉換規則。
   QuickAssignModal 按鈕文字：urgency === "Normal" 時顯示「建立病人資料」，其餘顯示「建立急診單」。
+  TimelinePanel drop 座標補正（BF-013）：dropYToTime 加入 zoom 除法；SettingsModal.applyZoom 與 App.vue onMounted 同步 --app-zoom CSS 變數。
 
 8. 已知問題 / 待辦
 

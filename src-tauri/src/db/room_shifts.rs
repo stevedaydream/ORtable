@@ -3,13 +3,14 @@ use crate::models::RoomScheduleEntry;
 
 fn map_row(r: &sqlx::sqlite::SqliteRow) -> RoomScheduleEntry {
     RoomScheduleEntry {
-        id:         r.get("id"),
-        room_name:  r.get("room_name"),
-        dept:       r.get("dept"),
-        date:       r.get("date"),
-        start_time: r.get("start_time"),
-        end_time:   r.get("end_time"),
-        notes:      r.get("notes"),
+        id:           r.get("id"),
+        room_name:    r.get("room_name"),
+        dept:         r.get("dept"),
+        date:         r.get("date"),
+        start_time:   r.get("start_time"),
+        end_time:     r.get("end_time"),
+        notes:        r.get("notes"),
+        is_emergency: r.get::<i64, _>("is_emergency") != 0,
     }
 }
 
@@ -47,11 +48,12 @@ pub async fn replace_by_month(
     // 3. 批次寫入新資料
     for e in entries {
         sqlx::query(
-            "INSERT INTO room_shifts (room_name,dept,date,start_time,end_time,notes)
-             VALUES (?,?,?,?,?,?)",
+            "INSERT INTO room_shifts (room_name,dept,date,start_time,end_time,notes,is_emergency)
+             VALUES (?,?,?,?,?,?,?)",
         )
         .bind(&e.room_name).bind(&e.dept).bind(&e.date)
         .bind(e.start_time).bind(e.end_time).bind(&e.notes)
+        .bind(e.is_emergency as i64)
         .execute(&mut *tx).await.map_err(|e| e.to_string())?;
     }
     tx.commit().await.map_err(|e| e.to_string())
@@ -67,10 +69,11 @@ pub async fn replace_by_date(
         .bind(date).execute(&mut *tx).await.map_err(|e| e.to_string())?;
     for e in entries {
         sqlx::query(
-            "INSERT INTO room_shifts (room_name,dept,date,start_time,end_time,notes) VALUES (?,?,?,?,?,?)"
+            "INSERT INTO room_shifts (room_name,dept,date,start_time,end_time,notes,is_emergency) VALUES (?,?,?,?,?,?,?)"
         )
         .bind(&e.room_name).bind(&e.dept).bind(date)
         .bind(e.start_time).bind(e.end_time).bind(&e.notes)
+        .bind(e.is_emergency as i64)
         .execute(&mut *tx).await.map_err(|e| e.to_string())?;
     }
     tx.commit().await.map_err(|e| e.to_string())

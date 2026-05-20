@@ -77,6 +77,22 @@ let url = format!("sqlite:{}?mode=rwc",
 - 錯誤回傳 `Result<T, String>`，用 `.map_err(|e| e.to_string())`
 - 所有 command 在 `commands.rs` 定義，在 `lib.rs` 的 `invoke_handler![]` 中註冊
 
+### ⚠️ WebView2 zoom 下的滑鼠座標補正（BF-013）
+Tauri `window.set_zoom()` 在 WebView2 上，**mouse/drag event 的 `clientX/Y` 是物理視窗像素（未縮放）**，但 `getBoundingClientRect()` 回傳 CSS 像素（已縮放）。兩者不在同一座標系，不能直接相減。
+
+正確做法：`clientX/Y` 先除以 zoom 再套 CSS 座標計算：
+```typescript
+const zoom = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--app-zoom')) || 1;
+const yInContent = (clientY / zoom - rect.top) + scrollTop;
+```
+
+**`--app-zoom` CSS 變數管理：**
+- `main.css` 寫死初始值 `1.3`（防止首幀閃爍）
+- `App.vue onMounted`：從 DB 讀取後立即 `setProperty('--app-zoom', zoom)` 同步
+- `SettingsModal.applyZoom()`：每次 zoom 變更時一併更新 CSS 變數
+
+---
+
 ### ⚠️ JS invoke 參數命名（BF-010）
 Tauri v2 的轉換方向是 **Rust snake_case → JS camelCase**。
 JS 端 invoke 時必須傳 **camelCase** key，Tauri 會自動轉回 snake_case 給 Rust：

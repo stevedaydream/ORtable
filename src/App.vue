@@ -98,6 +98,7 @@ import UpdateModal from "./components/UpdateModal.vue";
 import QuickAssignModal from "./components/QuickAssignModal.vue";
 import { useLogger } from "./composables/useLogger";
 import { useUpdater } from "./composables/useUpdater";
+import { useSettings } from "./composables/useDatabase";
 import { useTasksStore } from "./stores/tasks";
 import { useStaffStore } from "./stores/staff";
 import { useAssignmentsStore } from "./stores/assignments";
@@ -124,6 +125,7 @@ const tasksStore = useTasksStore();
 const staffStore = useStaffStore();
 const assignmentsStore = useAssignmentsStore();
 const updater = useUpdater();
+const { getAppZoom } = useSettings();
 
 function onStaffAssigned() {
   timelineRef.value?.reload();
@@ -149,6 +151,9 @@ function handleKeydown(e: KeyboardEvent) {
 onMounted(async () => {
   useLogger().initLogger();
   window.addEventListener("keydown", handleKeydown);
+  getAppZoom().then(zoom => {
+    document.documentElement.style.setProperty('--app-zoom', zoom.toString());
+  });
   const d = new Date();
   const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   

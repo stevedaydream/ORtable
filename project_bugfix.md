@@ -302,3 +302,22 @@ CSS `zoom` 屬性在 WebView2 (Chromium) 中**不會縮小 `vh` 的計算基準*
 3. `src-tauri/tauri.conf.json`：視窗改為 `1872×1170`（= 1440×900 × 1.3），使 `set_zoom(1.3)` 後 CSS layout viewport 恰好還原為 1440×900，保留原始 layout 設計尺寸。
 
 **牽扯檔案:** `src/assets/main.css`、`src-tauri/src/lib.rs`、`src-tauri/tauri.conf.json`
+
+---
+
+### BF-013: WebView2 `set_zoom` 下拖放時間軸位置偏移
+
+**問題描述:**
+使用 Tauri `window.set_zoom()` 縮放（預設 1.3）時，拖放病患卡片至時間軸後，顯示的預排時間不正確，時間點整體偏移。
+
+**根本原因:**
+兩個互相關聯的問題：
+1. WebView2 `set_zoom()` 下，drag event 的 `clientY` 是**物理視窗像素**（未縮放），但 `getBoundingClientRect().top` 是 **CSS 像素**（已縮放）。直接相減（`clientY - rect.top`）會產生 zoom 倍率的位置偏移。
+2. `--app-zoom` CSS 變數在 `main.css` 寫死為 `1.3`，從未在 runtime 更新。使用者若調整 zoom，ContextMenu 定位也會出錯，且 `dropYToTime` 無法讀到正確倍率。
+
+**最終解法:**
+1. `TimelinePanel.vue` `dropYToTime()`：加入 zoom 補正 `clientY / zoom - rect.top`
+2. `SettingsModal.vue` `applyZoom()`：新增 `document.documentElement.style.setProperty('--app-zoom', zoom.toString())` 即時同步 CSS 變數
+3. `App.vue` `onMounted`：呼叫 `getAppZoom()` 並將結果寫入 `--app-zoom`，確保啟動時 CSS 變數與 Rust 已套用的 zoom 一致
+
+**牽扯檔案:** `src/components/TimelinePanel.vue`、`src/components/SettingsModal.vue`、`src/App.vue`

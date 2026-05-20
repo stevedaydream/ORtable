@@ -22,7 +22,7 @@
       @dragover.prevent
       @drop="onDropAssignment"
     >
-      <div v-for="cat in CATEGORIES" :key="cat" v-show="staffByCategory[cat]!.length > 0">
+      <div v-for="cat in CATEGORIES" :key="cat" v-show="staffOnDutyByCategory[cat] > 0">
         <!-- Category toggle header -->
         <button class="flex items-center gap-1.5 w-full text-left mb-1" @click="activeCategories[cat] = !activeCategories[cat]">
           <i class="fa-solid text-[10px] transition-colors"
@@ -32,7 +32,9 @@
             :class="activeCategories[cat] ? categoryColor(cat) : 'text-gray-600'"
           >{{ CATEGORY_LABELS[cat] }}</span>
           <div class="flex-1 border-t border-gray-700/40 ml-1" />
-          <span class="text-[10px] text-gray-700 ml-1">{{ staffByCategory[cat]!.length }}</span>
+          <span class="text-[10px] ml-1" :class="staffByCategory[cat]!.length === 0 ? 'text-gray-600' : 'text-gray-500'">
+            {{ staffOnDutyByCategory[cat] }}/{{ staffByCategory[cat]!.length }}
+          </span>
         </button>
 
         <!-- Staff badges -->
@@ -98,13 +100,12 @@
           <button
             v-for="r in ROLES" :key="r.value"
             class="py-1 rounded text-[10px] font-bold border-2 transition-all"
-            :class="selectedRole === r.value ? r.activeClass : r.inactiveClass"
-            @click="selectedRole = r.value"
+            :class="r.inactiveClass"
+            @click="selectRoleAndConfirm(r.value)"
           >{{ r.label }}</button>
         </div>
-        <div class="flex gap-2 px-2 pb-2">
-          <button class="flex-1 py-1 text-[10px] rounded bg-gray-700 hover:bg-gray-600 text-gray-300" @click="closeMenu">取消</button>
-          <button class="flex-1 py-1 text-[10px] rounded bg-blue-700 hover:bg-blue-600 text-white font-bold" @click="confirmAssignment">確認</button>
+        <div class="text-center pb-2">
+          <button class="text-[10px] text-gray-500 hover:text-gray-300" @click="closeMenu">取消</button>
         </div>
       </template>
     </ContextMenu>
@@ -155,12 +156,25 @@ const activeCategories = reactive<Record<StaffCategory, boolean>>({
   vs: true, r: true, sa: true, or_nurse: true, intern: false, cross_train: false,
 });
 
+const staffOnDutyByCategory = computed(() => {
+  const hasRoster = rosterNames.value.size > 0;
+  const map = {} as Record<StaffCategory, number>;
+  for (const cat of CATEGORIES) {
+    let list = staffStore.staffList.filter(s => s.staff_category === cat);
+    if (hasRoster) list = list.filter(s => rosterNames.value.has(s.name));
+    map[cat] = list.length;
+  }
+  return map;
+});
+
 const staffByCategory = computed(() => {
   const hasRoster = rosterNames.value.size > 0;
+  const assigned = new Set(assignmentsStore.assignments.map(a => a.staff_name));
   const map = {} as Record<StaffCategory, Staff[]>;
   for (const cat of CATEGORIES) {
     let list = staffStore.staffList.filter(s => s.staff_category === cat);
     if (hasRoster) list = list.filter(s => rosterNames.value.has(s.name));
+    list = list.filter(s => !assigned.has(s.name));
     map[cat] = list;
   }
   return map;
@@ -204,8 +218,6 @@ const menu = reactive({
   rawX: 0,
   rawY: 0,
 });
-const selectedRole = ref("Circ");
-
 function onRightClick(e: MouseEvent, s: Staff) {
   menu.open     = true;
   menu.staffName = s.name;
@@ -213,7 +225,6 @@ function onRightClick(e: MouseEvent, s: Staff) {
   menu.roomName  = "";
   menu.rawX      = e.clientX;
   menu.rawY      = e.clientY;
-  selectedRole.value = "Circ";
 }
 
 function selectRoom(roomName: string) {
@@ -230,13 +241,13 @@ function todayStr(): string {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
 
-async function confirmAssignment() {
+async function selectRoleAndConfirm(role: string) {
   const entry: StaffAssignment = {
     id: 0,
     staff_name: menu.staffName,
     room_name:  menu.roomName,
     date:       todayStr(),
-    role:       selectedRole.value,
+    role,
   };
   try {
     await assignmentsStore.add(entry);

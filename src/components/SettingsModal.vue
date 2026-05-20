@@ -1105,19 +1105,22 @@ function excelSerialToDateStr(serial: number): string {
 function parseXlsx(data: Uint8Array) {
   logger.addLog("info", "[XLSX] 開始解析刀房年度排班（樞紐格式）...");
   try {
-    const wb = XLSX.read(data, { type: "array", raw: true });
+    const wb = XLSX.read(data, { type: "array", raw: true, cellStyles: true });
     logger.addLog("info", `[XLSX] 找到 ${wb.SheetNames.length} 個分頁: ${wb.SheetNames.join(", ")}`);
 
     const entries: RoomScheduleEntry[] = [];
 
     for (const sheetName of wb.SheetNames) {
       const ws = wb.Sheets[sheetName];
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
       const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", raw: true });
 
       let weekDates: (string | null)[] = [];
       let currentRoom = "";
 
-      for (const row of rows) {
+      for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
+        const row = rows[rowIdx];
+        const sheetRow = range.s.r + rowIdx;
         const col0 = String(row[0] ?? "").trim();
         const col1 = String(row[1] ?? "").trim().toUpperCase();
 
@@ -1142,6 +1145,8 @@ function parseXlsx(data: Uint8Array) {
             const dept = String(row[i + 2] ?? "").trim();
             const dateStr = weekDates[i];
             if (!dept || !dateStr) continue;
+            const cellAddr = XLSX.utils.encode_cell({ r: sheetRow, c: range.s.c + i + 2 });
+            const isEmergency = ws[cellAddr]?.s?.fgColor?.rgb === 'FFFF00';
             entries.push({
               id: 0,
               room_name: currentRoom,
@@ -1150,6 +1155,7 @@ function parseXlsx(data: Uint8Array) {
               start_time: dateToMidnightUnix(dateStr) + times.start,
               end_time:   dateToMidnightUnix(dateStr) + times.end,
               notes: "",
+              is_emergency: isEmergency,
             });
           }
         }
@@ -1565,6 +1571,7 @@ const zoomValue = ref(1.3);
 
 async function applyZoom(zoom: number) {
   zoomValue.value = zoom;
+  document.documentElement.style.setProperty('--app-zoom', zoom.toString());
   await setAppZoom(zoom);
 }
 

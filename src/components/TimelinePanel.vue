@@ -198,19 +198,22 @@
               v-for="shift in shiftsForRoom(room.name)" :key="shift.id"
               class="absolute left-1 right-1 rounded px-1.5 overflow-hidden select-none transition-all z-[9]"
               :class="[
-                deptColor(shift.dept),
+                shift.is_emergency ? 'bg-red-900/80 border border-red-500' : deptColor(shift.dept),
                 editMode
                   ? selectedShift?.id === shift.id
                     ? 'opacity-100 ring-2 ring-white cursor-pointer scale-[1.03]'
                     : 'opacity-75 cursor-pointer hover:opacity-95 hover:ring-1 hover:ring-white/40'
-                  : 'opacity-50 pointer-events-none',
+                  : shift.is_emergency ? 'opacity-90 pointer-events-none' : 'opacity-50 pointer-events-none',
               ]"
               :style="blockStyle(shift)"
               :title="editMode ? (selectedShift?.id === shift.id ? '已選取，點擊目標房間欄移動' : `點擊選取 ${shift.dept}，右鍵快速指派`) : undefined"
               @click.stop="editMode && onShiftBlockClick(shift)"
               @contextmenu.prevent="editMode && onShiftRightClick($event, shift)"
             >
-              <div class="truncate text-[10px] font-medium leading-tight pt-0.5">{{ shift.dept }}</div>
+              <div class="flex items-center gap-1">
+                <span v-if="shift.is_emergency" class="shrink-0 text-[9px] font-bold text-red-300 bg-red-700/60 px-1 rounded leading-tight">急診房</span>
+                <div class="truncate text-[10px] font-medium leading-tight pt-0.5" :class="shift.is_emergency ? 'text-red-100' : ''">{{ shift.dept }}</div>
+              </div>
               <div class="truncate text-[9px] opacity-70 leading-none">{{ fmtTs(shift.start_time) }}–{{ fmtTs(shift.end_time) }}</div>
             </div>
 
@@ -337,17 +340,16 @@
             房間：<span class="text-gray-300">{{ dropState.roomName }}</span>
           </div>
           <div class="text-[10px] text-gray-400 mb-1.5 font-semibold">選擇角色</div>
-          <div class="grid grid-cols-3 gap-1.5 mb-4">
+          <div class="grid grid-cols-3 gap-1.5 mb-3">
             <button
               v-for="r in ROLES" :key="r.value"
               class="py-1.5 rounded text-[10px] font-bold border-2 transition-all"
-              :class="dropState.role === r.value ? r.activeClass : r.inactiveClass"
-              @click="dropState.role = r.value"
+              :class="r.inactiveClass"
+              @click="selectRoleAndConfirm(r.value)"
             >{{ r.label }}</button>
           </div>
-          <div class="flex gap-2">
-            <button class="flex-1 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-300" @click="dropState = null">取消</button>
-            <button class="flex-1 py-1.5 text-xs rounded bg-blue-700 hover:bg-blue-600 text-white font-bold" @click="confirmDrop">確認指派</button>
+          <div class="text-center">
+            <button class="text-[10px] text-gray-500 hover:text-gray-300" @click="dropState = null">取消</button>
           </div>
         </div>
       </div>
@@ -1083,8 +1085,9 @@ function onDrop(e: DragEvent, roomName: string) {
 function dropYToTime(clientY: number): number {
   const container = scrollEl.value;
   if (!container) return Math.floor(Date.now() / 1000);
+  const zoom = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--app-zoom')) || 1;
   const rect = container.getBoundingClientRect();
-  const yInContent = (clientY - rect.top) + container.scrollTop - HEADER_H;
+  const yInContent = (clientY / zoom - rect.top) + container.scrollTop - HEADER_H;
   const hoursOffset = Math.max(0, yInContent) / PX_PER_HOUR;
   return dayStart.value + Math.round(hoursOffset * 3600);
 }
@@ -1098,6 +1101,12 @@ async function assignTaskToRoom(taskId: number, roomName: string, clientY?: numb
   } catch (e) {
     console.error("[Timeline] 指派病患失敗:", e);
   }
+}
+
+async function selectRoleAndConfirm(role: string) {
+  if (!dropState.value) return;
+  dropState.value.role = role;
+  await confirmDrop();
 }
 
 async function confirmDrop() {

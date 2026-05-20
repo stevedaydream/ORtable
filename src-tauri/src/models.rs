@@ -89,6 +89,7 @@ pub struct RoomScheduleEntry {
     pub start_time: i64,   // unix timestamp
     pub end_time: i64,     // unix timestamp
     pub notes: String,
+    pub is_emergency: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
