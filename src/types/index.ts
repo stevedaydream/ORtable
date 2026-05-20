@@ -155,6 +155,8 @@ export interface RoomRecommendation {
   within_deadline: boolean;
   est_available_mins: number;
   reason: string;
+  anes_conflict: boolean;
+  is_emergency_room: boolean;
 }
 
 export const URGENCY_WEIGHTS: Record<UrgencyLevel, number> = {

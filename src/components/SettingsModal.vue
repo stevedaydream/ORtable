@@ -320,6 +320,13 @@
                 <span class="text-[9px] text-gray-500 mt-1">※ 用於人員指派及 Extra 線勞基法判別</span>
               </div>
               <input ref="staffXlsxInput" type="file" accept=".xlsx,.xls" class="hidden" @change="onStaffXlsxFile" />
+              <button class="btn-secondary text-xs flex items-center gap-1.5" @click="downloadVsDoctorTemplate">
+                <i class="fa-solid fa-file-arrow-down text-green-400"></i>VS範本
+              </button>
+              <button class="btn-secondary text-xs flex items-center gap-1.5" @click="vsDoctorInput?.click()">
+                <i class="fa-solid fa-user-doctor text-purple-400"></i>匯入VS名單
+              </button>
+              <input ref="vsDoctorInput" type="file" accept=".txt,.csv" class="hidden" @change="onVsDoctorFile" />
               <button class="btn-secondary text-xs" @click="toggleBatchStaff">
                 <i class="fa-solid fa-list-ul mr-1"></i>批量新增
               </button>
@@ -442,11 +449,9 @@
             </div>
           </div>
 
-          <!-- Staff add/edit inline form -->
-          <div v-if="staffForm.open" class="mb-4 bg-gray-700/60 rounded-xl p-4 border border-gray-600">
-            <div class="text-sm font-semibold text-gray-300 mb-3">
-              {{ staffForm.id ? '編輯人員' : '新增人員' }}
-            </div>
+          <!-- Staff add inline form (new only) -->
+          <div v-if="staffForm.open && staffForm.id === 0" class="mb-4 bg-gray-700/60 rounded-xl p-4 border border-gray-600">
+            <div class="text-sm font-semibold text-gray-300 mb-3">新增人員</div>
             <div class="grid grid-cols-2 gap-3">
               <div>
                 <label class="form-label">姓名 <span class="text-red-400">*</span></label>
@@ -480,7 +485,7 @@
                 :disabled="!staffForm.name.trim() || (staffForm.staff_category === 'cross_train' && !staffForm.unit.trim())"
                 @click="saveStaff"
               >
-                {{ staffForm.id ? '儲存' : '新增' }}
+                新增
               </button>
             </div>
           </div>
@@ -496,22 +501,72 @@
                 <span class="text-[10px] text-gray-600">{{ staffByCategory[cat].length }} 人</span>
               </div>
               <div class="space-y-1">
-                <div
-                  v-for="s in staffByCategory[cat]" :key="s.id"
-                  class="flex items-center gap-3 bg-gray-700/40 rounded-lg px-3 py-2"
-                >
-                  <i class="fa-solid fa-user text-gray-500 text-xs w-4 text-center"></i>
-                  <span class="flex-1 text-sm text-gray-100">{{ s.name }}</span>
-                  <span v-if="s.unit" class="text-[10px] text-gray-500 truncate max-w-[100px]">{{ s.unit }}</span>
-                  <span v-if="s.is_on_call" class="text-[10px] text-yellow-400 bg-yellow-900/40 px-1.5 py-0.5 rounded">值班</span>
-                  <span v-if="s.is_volunteer_extra" class="text-[10px] text-purple-400 bg-purple-900/40 px-1.5 py-0.5 rounded">Extra</span>
-                  <button class="text-gray-500 hover:text-blue-400 text-xs px-1" @click="startEditStaff(s)">
-                    <i class="fa-solid fa-pen"></i>
-                  </button>
-                  <button class="text-gray-500 hover:text-red-400 text-xs px-1" @click="deleteStaff(s.id)">
-                    <i class="fa-solid fa-trash"></i>
-                  </button>
-                </div>
+                <template v-for="s in staffByCategory[cat]" :key="s.id">
+                  <div
+                    class="flex items-center gap-3 rounded-lg px-3 py-2 transition-all"
+                    :class="staffForm.open && staffForm.id === s.id
+                      ? 'bg-gray-700/70 rounded-b-none border border-blue-600/50 border-b-0'
+                      : 'bg-gray-700/40'"
+                  >
+                    <i class="fa-solid fa-user text-gray-500 text-xs w-4 text-center"></i>
+                    <span class="flex-1 text-sm text-gray-100">{{ s.name }}</span>
+                    <span v-if="s.unit" class="text-[10px] text-gray-500 truncate max-w-[100px]">{{ s.unit }}</span>
+                    <span v-if="s.is_on_call" class="text-[10px] text-yellow-400 bg-yellow-900/40 px-1.5 py-0.5 rounded">值班</span>
+                    <span v-if="s.is_volunteer_extra" class="text-[10px] text-purple-400 bg-purple-900/40 px-1.5 py-0.5 rounded">Extra</span>
+                    <button
+                      class="text-xs px-1 transition-colors"
+                      :class="staffForm.open && staffForm.id === s.id ? 'text-blue-400' : 'text-gray-500 hover:text-blue-400'"
+                      @click="startEditStaff(s)"
+                    >
+                      <i class="fa-solid fa-pen"></i>
+                    </button>
+                    <button class="text-gray-500 hover:text-red-400 text-xs px-1" @click="deleteStaff(s.id)">
+                      <i class="fa-solid fa-trash"></i>
+                    </button>
+                  </div>
+                  <!-- Inline edit form expanding below the card -->
+                  <div
+                    v-if="staffForm.open && staffForm.id === s.id"
+                    class="bg-gray-700/60 rounded-b-xl px-4 pt-3 pb-4 border border-blue-600/50 border-t-0 mb-1"
+                  >
+                    <div class="grid grid-cols-2 gap-3">
+                      <div>
+                        <label class="form-label">姓名 <span class="text-red-400">*</span></label>
+                        <input v-model="staffForm.name" class="form-input" placeholder="王小明" />
+                      </div>
+                      <div>
+                        <label class="form-label">類別 <span class="text-red-400">*</span></label>
+                        <select v-model="staffForm.staff_category" class="form-input">
+                          <option v-for="(label, key) in CATEGORY_LABELS" :key="key" :value="key">{{ label }}</option>
+                        </select>
+                      </div>
+                      <div v-if="staffForm.staff_category === 'cross_train'">
+                        <label class="form-label">所屬單位 <span class="text-red-400">*</span></label>
+                        <input v-model="staffForm.unit" class="form-input" placeholder="心臟外科加護病房" />
+                      </div>
+                    </div>
+                    <div class="flex gap-4 mt-3">
+                      <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" v-model="staffForm.is_on_call" class="rounded" />
+                        <span class="text-sm text-gray-300">今日值班 (二線待命)</span>
+                      </label>
+                      <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" v-model="staffForm.is_volunteer_extra" class="rounded" />
+                        <span class="text-sm text-gray-300">可加 Extra</span>
+                      </label>
+                    </div>
+                    <div class="flex justify-end gap-2 mt-3">
+                      <button class="btn-secondary text-xs" @click="staffForm.open = false">取消</button>
+                      <button
+                        class="btn-primary text-xs"
+                        :disabled="!staffForm.name.trim() || (staffForm.staff_category === 'cross_train' && !staffForm.unit.trim())"
+                        @click="saveStaff"
+                      >
+                        儲存
+                      </button>
+                    </div>
+                  </div>
+                </template>
               </div>
             </div>
           </div>
@@ -621,6 +676,111 @@
               <button class="btn-primary text-xs" :disabled="!selfPayForm.name.trim()" @click="saveSelfPay">
                 {{ selfPayForm.id ? '儲存' : '新增' }}
               </button>
+            </div>
+          </div>
+        </template>
+
+        <!-- ── 詞庫管理 ──────────────────────────────────────────── -->
+        <template v-if="tab === 'vocab'">
+          <!-- 診斷詞庫 -->
+          <div class="mb-6">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <span class="text-sm font-semibold text-gray-300">診斷詞庫</span>
+                <p class="text-xs text-gray-500 mt-0.5">縮寫 → 全文對照，診斷欄位可快速輸入</p>
+              </div>
+              <div class="flex gap-2">
+                <button class="btn-secondary text-xs flex items-center gap-1.5" @click="downloadVocabTemplate('diag')">
+                  <i class="fa-solid fa-file-arrow-down text-green-400"></i>下載範本
+                </button>
+                <button class="btn-secondary text-xs flex items-center gap-1.5" @click="diagVocabCsvInput?.click()">
+                  <i class="fa-solid fa-file-import text-blue-400"></i>匯入 CSV
+                </button>
+                <input ref="diagVocabCsvInput" type="file" accept=".csv,.txt" class="hidden" @change="onDiagVocabCsv" />
+                <button class="btn-primary text-xs" @click="startAddDiagVocab">
+                  <i class="fa-solid fa-plus mr-1"></i>新增
+                </button>
+              </div>
+            </div>
+            <div v-if="diagVocabForm.open" class="mb-3 bg-gray-700/60 rounded-xl p-3 border border-gray-600 flex gap-2 items-end">
+              <div class="flex-1">
+                <label class="form-label">縮寫</label>
+                <input v-model="diagVocabForm.abbr" class="form-input" placeholder="APPY" />
+              </div>
+              <div class="flex-[2]">
+                <label class="form-label">全文</label>
+                <input v-model="diagVocabForm.full" class="form-input" placeholder="急性闌尾炎" @keydown.enter="addDiagVocabEntry" />
+              </div>
+              <button class="btn-primary text-xs shrink-0" @click="addDiagVocabEntry">新增</button>
+              <button class="btn-secondary text-xs shrink-0" @click="diagVocabForm.open = false">取消</button>
+            </div>
+            <div class="space-y-1 max-h-52 overflow-y-auto">
+              <div v-for="(entry, i) in diagVocab" :key="i"
+                class="flex items-center gap-2 bg-gray-700/40 rounded-lg px-3 py-1.5">
+                <span class="text-[10px] font-mono font-bold text-blue-300 bg-blue-900/50 px-1.5 py-0.5 rounded shrink-0">{{ entry.abbr }}</span>
+                <span class="flex-1 text-xs text-gray-200">{{ entry.full }}</span>
+                <button class="text-gray-600 hover:text-red-400 text-xs px-1" @click="removeDiagVocabEntry(i)">
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+              <div v-if="diagVocab.length === 0" class="text-center text-gray-600 py-4 text-sm">
+                尚無診斷詞庫，點擊「新增」或匯入 CSV（格式：縮寫,全文）
+              </div>
+            </div>
+            <div class="flex items-center justify-end gap-2 mt-3">
+              <span v-if="diagVocabSaveMsg" class="text-xs" :class="diagVocabSaveMsg.ok ? 'text-green-400' : 'text-red-400'">{{ diagVocabSaveMsg.msg }}</span>
+              <button class="btn-primary text-xs" @click="saveDiagVocab">儲存詞庫</button>
+            </div>
+          </div>
+
+          <!-- 術式詞庫 -->
+          <div class="border-t border-gray-700/60 pt-4">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <span class="text-sm font-semibold text-gray-300">術式詞庫</span>
+                <p class="text-xs text-gray-500 mt-0.5">縮寫 → 全文對照，術式欄位可快速輸入</p>
+              </div>
+              <div class="flex gap-2">
+                <button class="btn-secondary text-xs flex items-center gap-1.5" @click="downloadVocabTemplate('proc')">
+                  <i class="fa-solid fa-file-arrow-down text-green-400"></i>下載範本
+                </button>
+                <button class="btn-secondary text-xs flex items-center gap-1.5" @click="procVocabCsvInput?.click()">
+                  <i class="fa-solid fa-file-import text-blue-400"></i>匯入 CSV
+                </button>
+                <input ref="procVocabCsvInput" type="file" accept=".csv,.txt" class="hidden" @change="onProcVocabCsv" />
+                <button class="btn-primary text-xs" @click="startAddProcVocab">
+                  <i class="fa-solid fa-plus mr-1"></i>新增
+                </button>
+              </div>
+            </div>
+            <div v-if="procVocabForm.open" class="mb-3 bg-gray-700/60 rounded-xl p-3 border border-gray-600 flex gap-2 items-end">
+              <div class="flex-1">
+                <label class="form-label">縮寫</label>
+                <input v-model="procVocabForm.abbr" class="form-input" placeholder="AP" />
+              </div>
+              <div class="flex-[2]">
+                <label class="form-label">全文</label>
+                <input v-model="procVocabForm.full" class="form-input" placeholder="闌尾切除術" @keydown.enter="addProcVocabEntry" />
+              </div>
+              <button class="btn-primary text-xs shrink-0" @click="addProcVocabEntry">新增</button>
+              <button class="btn-secondary text-xs shrink-0" @click="procVocabForm.open = false">取消</button>
+            </div>
+            <div class="space-y-1 max-h-52 overflow-y-auto">
+              <div v-for="(entry, i) in procVocab" :key="i"
+                class="flex items-center gap-2 bg-gray-700/40 rounded-lg px-3 py-1.5">
+                <span class="text-[10px] font-mono font-bold text-amber-300 bg-amber-900/50 px-1.5 py-0.5 rounded shrink-0">{{ entry.abbr }}</span>
+                <span class="flex-1 text-xs text-gray-200">{{ entry.full }}</span>
+                <button class="text-gray-600 hover:text-red-400 text-xs px-1" @click="removeProcVocabEntry(i)">
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+              <div v-if="procVocab.length === 0" class="text-center text-gray-600 py-4 text-sm">
+                尚無術式詞庫，點擊「新增」或匯入 CSV（格式：縮寫,全文）
+              </div>
+            </div>
+            <div class="flex items-center justify-end gap-2 mt-3">
+              <span v-if="procVocabSaveMsg" class="text-xs" :class="procVocabSaveMsg.ok ? 'text-green-400' : 'text-red-400'">{{ procVocabSaveMsg.msg }}</span>
+              <button class="btn-primary text-xs" @click="saveProcVocab">儲存詞庫</button>
             </div>
           </div>
         </template>
@@ -745,7 +905,7 @@ import { STAFF_CATEGORY_LABELS } from "../types";
 
 defineEmits<{ close: [] }>();
 
-const tab = ref<"rooms" | "staff" | "depts" | "selfpay" | "display" | "cloud" | "changelog">("rooms");
+const tab = ref<"rooms" | "staff" | "depts" | "selfpay" | "vocab" | "display" | "cloud" | "changelog">("rooms");
 const logger = useLogger();
 const updater = useUpdater();
 const appVersion = ref("—");
@@ -755,6 +915,7 @@ const TABS = [
   { key: "staff",     label: "人員管理", icon: "fa-users" },
   { key: "depts",     label: "科別管理", icon: "fa-layer-group" },
   { key: "selfpay",   label: "自費項目", icon: "fa-receipt" },
+  { key: "vocab",     label: "詞庫管理", icon: "fa-book-open" },
   { key: "display",   label: "顯示設定", icon: "fa-display" },
   { key: "cloud",     label: "雲端設定", icon: "fa-cloud" },
   { key: "changelog", label: "更新紀錄", icon: "fa-clock-rotate-left" },
@@ -772,7 +933,7 @@ const staffStore = useStaffStore();
 const deptRulesStore = useDeptRulesStore();
 const roomShiftsDb = useRoomShiftsDb();
 const staffRosterDb = useStaffRosterDb();
-const { getGasUrl, setGasUrl, getAppZoom, setAppZoom, getRoomCodeMap, setRoomCodeMap, getRoomGroups, setRoomGroups } = useSettings();
+const { getGasUrl, setGasUrl, getAppZoom, setAppZoom, getRoomCodeMap, setRoomCodeMap, getRoomGroups, setRoomGroups, getDiagnosisVocab, setDiagnosisVocab, getProcedureVocab, setProcedureVocab } = useSettings();
 
 // ── Dept Rules form ───────────────────────────────────────────────────────────
 const PRESET_COLORS = [
@@ -868,8 +1029,14 @@ function expandByGroups(entries: RoomScheduleEntry[]): RoomScheduleEntry[] {
   for (const entry of entries) {
     const physical = groups[entry.room_name];
     if (physical && physical.length) {
+      // 群組名含麻醉屬性時，寫入展開後各房間的 notes，供後續偵測使用
+      const groupTag = /局麻|局部/.test(entry.room_name) ? '局麻'
+        : /全麻|全身/.test(entry.room_name) ? '全麻' : '';
       for (const roomName of physical) {
-        result.push({ ...entry, id: 0, room_name: roomName });
+        const notes = groupTag && !entry.notes.includes(groupTag)
+          ? (entry.notes ? `${entry.notes} ${groupTag}` : groupTag)
+          : entry.notes;
+        result.push({ ...entry, id: 0, room_name: roomName, notes });
       }
     } else {
       result.push(entry);
@@ -1146,7 +1313,21 @@ function parseXlsx(data: Uint8Array) {
             const dateStr = weekDates[i];
             if (!dept || !dateStr) continue;
             const cellAddr = XLSX.utils.encode_cell({ r: sheetRow, c: range.s.c + i + 2 });
-            const isEmergency = ws[cellAddr]?.s?.fgColor?.rgb === 'FFFF00';
+            const cell = ws[cellAddr];
+            const fgColor = cell?.s?.fgColor;
+            const rgb = fgColor?.rgb?.toUpperCase() ?? "";
+            // Yellow variants: FFFF00 (standard), FFD966 (Excel gold), FFFF99 (light), FFFACD (lemon chiffon)
+            // Also check theme-based yellow (theme index 9 in Office default theme)
+            const isEmergency = !!(rgb && (
+              rgb === 'FFFF00' || rgb === 'FFD966' || rgb === 'FFFF99' ||
+              rgb === 'FFFACD' || rgb === 'FFF2CC' || rgb === 'FFFF88' ||
+              (rgb.startsWith('FFFF') && rgb !== 'FFFFFFFF')
+            )) || fgColor?.theme === 9;
+            if (isEmergency) {
+              logger.addLog("info", `[XLSX] 急診房偵測: ${currentRoom} ${dateStr} cell=${cellAddr} rgb=${rgb} theme=${fgColor?.theme}`);
+            } else if (fgColor?.rgb || fgColor?.theme !== undefined) {
+              logger.addLog("info", `[XLSX] 儲存格色彩: ${currentRoom} ${dateStr} cell=${cellAddr} rgb=${fgColor?.rgb} theme=${fgColor?.theme} (非黃色，未標急診)`);
+            }
             entries.push({
               id: 0,
               room_name: currentRoom,
@@ -1420,6 +1601,10 @@ function startAddStaff() {
 }
 
 function startEditStaff(s: Staff) {
+  if (staffForm.open && staffForm.id === s.id) {
+    staffForm.open = false;
+    return;
+  }
   Object.assign(staffForm, { open: true, id: s.id, name: s.name, staff_category: s.staff_category, unit: s.unit, is_on_call: s.is_on_call, is_volunteer_extra: s.is_volunteer_extra });
 }
 
@@ -1565,6 +1750,146 @@ async function confirmSelfPayImport() {
   }
 }
 
+// ── VS Doctor Import ──────────────────────────────────────────────────────────
+const vsDoctorInput = ref<HTMLInputElement | null>(null);
+
+function downloadVsDoctorTemplate() {
+  const lines = ["姓名", "張三", "李四", "王五"].join("\r\n");
+  const blob = new Blob(["﻿" + lines], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = "vs_doctors_template.txt"; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadVocabTemplate(type: "diag" | "proc") {
+  const diagEx = ["縮寫,全文", "APPY,急性闌尾炎", "HCC,肝細胞癌", "GIB,上消化道出血", "DM,糖尿病"];
+  const procEx = ["縮寫,全文", "AP,闌尾切除術", "LC,腹腔鏡膽囊切除術", "EL,探查性剖腹手術", "ORIF,骨折開放復位內固定"];
+  const lines = (type === "diag" ? diagEx : procEx).join("\r\n");
+  const blob = new Blob(["﻿" + lines], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = type === "diag" ? "diagnosis_vocab_template.csv" : "procedure_vocab_template.csv"; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function onVsDoctorFile(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async (ev) => {
+    const text = ev.target?.result as string;
+    const names = text.replace(/^﻿/, "").split(/\r?\n/)
+      .map(l => l.split(",")[0].trim())
+      .filter(Boolean);
+    const existing = new Set(staffStore.staffList.map(s => s.name));
+    const now = Math.floor(Date.now() / 1000);
+    let added = 0;
+    for (const name of names) {
+      if (!existing.has(name)) {
+        await staffStore.add({
+          id: 0, name, role: "VS", type: "nur", staff_category: "vs",
+          unit: "", is_on_call: false, is_volunteer_extra: false,
+          today_shift_start: now, next_day_shift_start: now + 86400,
+        });
+        existing.add(name);
+        added++;
+      }
+    }
+    alert(`已匯入 ${added} 位主治醫師（略過 ${names.length - added} 筆重複）`);
+  };
+  reader.readAsText(file, "utf-8");
+  (e.target as HTMLInputElement).value = "";
+}
+
+// ── Vocab ─────────────────────────────────────────────────────────────────────
+interface VocabEntry { abbr: string; full: string; }
+
+const diagVocab        = ref<VocabEntry[]>([]);
+const procVocab        = ref<VocabEntry[]>([]);
+const diagVocabSaveMsg = ref<{ ok: boolean; msg: string } | null>(null);
+const procVocabSaveMsg = ref<{ ok: boolean; msg: string } | null>(null);
+const diagVocabCsvInput = ref<HTMLInputElement | null>(null);
+const procVocabCsvInput = ref<HTMLInputElement | null>(null);
+const diagVocabForm = reactive({ open: false, abbr: "", full: "" });
+const procVocabForm = reactive({ open: false, abbr: "", full: "" });
+
+async function loadVocab() {
+  try {
+    const [dRaw, pRaw] = await Promise.all([getDiagnosisVocab(), getProcedureVocab()]);
+    diagVocab.value = JSON.parse(dRaw || "[]");
+    procVocab.value = JSON.parse(pRaw || "[]");
+  } catch { diagVocab.value = []; procVocab.value = []; }
+}
+
+function startAddDiagVocab() { Object.assign(diagVocabForm, { open: true, abbr: "", full: "" }); }
+function startAddProcVocab() { Object.assign(procVocabForm, { open: true, abbr: "", full: "" }); }
+
+function addDiagVocabEntry() {
+  const abbr = diagVocabForm.abbr.trim(), full = diagVocabForm.full.trim();
+  if (!abbr || !full) return;
+  diagVocab.value.push({ abbr, full });
+  Object.assign(diagVocabForm, { open: false, abbr: "", full: "" });
+}
+
+function addProcVocabEntry() {
+  const abbr = procVocabForm.abbr.trim(), full = procVocabForm.full.trim();
+  if (!abbr || !full) return;
+  procVocab.value.push({ abbr, full });
+  Object.assign(procVocabForm, { open: false, abbr: "", full: "" });
+}
+
+function removeDiagVocabEntry(i: number) { diagVocab.value.splice(i, 1); }
+function removeProcVocabEntry(i: number) { procVocab.value.splice(i, 1); }
+
+async function saveDiagVocab() {
+  try {
+    await setDiagnosisVocab(JSON.stringify(diagVocab.value));
+    diagVocabSaveMsg.value = { ok: true, msg: "✓ 已儲存" };
+    setTimeout(() => { diagVocabSaveMsg.value = null; }, 2000);
+  } catch (e) { diagVocabSaveMsg.value = { ok: false, msg: `儲存失敗：${e}` }; }
+}
+
+async function saveProcVocab() {
+  try {
+    await setProcedureVocab(JSON.stringify(procVocab.value));
+    procVocabSaveMsg.value = { ok: true, msg: "✓ 已儲存" };
+    setTimeout(() => { procVocabSaveMsg.value = null; }, 2000);
+  } catch (e) { procVocabSaveMsg.value = { ok: false, msg: `儲存失敗：${e}` }; }
+}
+
+function parseVocabCsv(text: string): VocabEntry[] {
+  return text.replace(/^﻿/, "").split(/\r?\n/)
+    .map(l => l.trim()).filter(Boolean)
+    .map(l => { const [abbr, ...rest] = l.split(","); return { abbr: abbr.trim(), full: rest.join(",").trim() }; })
+    .filter(e => e.abbr && e.full);
+}
+
+function onDiagVocabCsv(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const entries = parseVocabCsv(ev.target?.result as string);
+    diagVocab.value.push(...entries);
+    alert(`已匯入 ${entries.length} 筆診斷詞庫，請記得儲存`);
+  };
+  reader.readAsText(file, "utf-8");
+  (e.target as HTMLInputElement).value = "";
+}
+
+function onProcVocabCsv(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const entries = parseVocabCsv(ev.target?.result as string);
+    procVocab.value.push(...entries);
+    alert(`已匯入 ${entries.length} 筆術式詞庫，請記得儲存`);
+  };
+  reader.readAsText(file, "utf-8");
+  (e.target as HTMLInputElement).value = "";
+}
+
 // ── Display settings ──────────────────────────────────────────────────────────
 const ZOOM_PRESETS = [0.8, 1.0, 1.3, 1.5, 1.8];
 const zoomValue = ref(1.3);
@@ -1593,5 +1918,6 @@ onMounted(async () => {
   appVersion.value = await getVersion().catch(() => "—");
   await loadCodeMap();
   await loadRoomGroups();
+  await loadVocab();
 });
 </script>

@@ -118,6 +118,16 @@
               <span class="flex-1 text-xs font-semibold truncate"
                 :class="!room.is_active ? 'text-gray-600' : room.is_backup ? 'text-orange-300' : 'text-gray-200'"
               >{{ room.name }}</span>
+              <!-- 急診時段 badges -->
+              <span
+                v-for="period in emergencyPeriods(room.name)" :key="period"
+                class="text-[8px] font-bold text-red-200 bg-red-700/70 px-1 py-0.5 rounded shrink-0 leading-none"
+              >急{{ period }}</span>
+              <!-- 局麻 badge -->
+              <span
+                v-if="isLocalAnesRoom(room.name)"
+                class="text-[8px] font-bold text-amber-200 bg-amber-700/70 px-1 py-0.5 rounded shrink-0 leading-none"
+              >局麻</span>
               <span v-if="room.is_backup && room.is_active" class="text-[9px] text-orange-500 shrink-0">備用</span>
               <span v-if="!room.is_active" class="text-[9px] text-gray-600 shrink-0">停用</span>
               <!-- Switch -->
@@ -787,6 +797,26 @@ const dayStart = computed(() => {
 function shiftsForRoom(roomName: string): RoomScheduleEntry[] {
   return shifts.value.filter((s) => s.room_name === roomName);
 }
+
+function emergencyPeriods(roomName: string): string[] {
+  return shifts.value
+    .filter(s => s.room_name === roomName && s.is_emergency)
+    .map(s => {
+      const d = new Date(s.start_time * 1000);
+      const mins = d.getHours() * 60 + d.getMinutes();
+      if (mins < 12 * 60 + 30) return 'AM';
+      if (mins < 15 * 60 + 50) return 'PM';
+      return '值班';
+    });
+}
+
+function isLocalAnesRoom(roomName: string): boolean {
+  return shifts.value.some(s => {
+    if (s.room_name !== roomName) return false;
+    const text = `${s.dept} ${s.notes}`;
+    return text.includes('局麻') || text.includes('局部');
+  });
+}
 function assignmentsForRoom(roomName: string): StaffAssignment[] {
   return assignmentsStore.assignments.filter((a) => a.room_name === roomName);
 }
@@ -822,7 +852,18 @@ function blockStyle(shift: RoomScheduleEntry) {
 }
 
 function taskBlockStyle(task: SurgeryTask) {
-  const startTs = task.scheduled_at || task.created_at;
+  let startTs: number;
+  if (task.scheduled_at) {
+    startTs = task.scheduled_at;
+  } else {
+    // Anchor to the room's active shift (or next/first shift) when no explicit time was set
+    const roomShifts = shifts.value.filter(s => s.room_name === task.expected_room);
+    const now = Math.floor(Date.now() / 1000);
+    const active = roomShifts.find(s => s.start_time <= now && s.end_time > now);
+    const next   = roomShifts.find(s => s.start_time > now);
+    const anchor = active ?? next ?? roomShifts[0];
+    startTs = anchor ? anchor.start_time : task.created_at;
+  }
   const top = timeToY(startTs);
   const height = (task.est_time_mins / 60) * PX_PER_HOUR;
   return { top: `${top}px`, height: `${height}px` };

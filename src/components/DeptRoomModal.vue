@@ -39,11 +39,12 @@
                   <th class="px-3 py-2 text-left text-gray-400 font-medium w-20">開始</th>
                   <th class="px-3 py-2 text-left text-gray-400 font-medium w-20">結束</th>
                   <th class="px-3 py-2 text-left text-gray-400 font-medium">備注</th>
+                  <th class="px-3 py-2 text-center text-gray-400 font-medium w-14">急診</th>
                   <th class="px-3 py-2 text-right text-gray-400 font-medium w-20">操作</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-700/50">
-                <tr v-for="(row, i) in rows" :key="i" class="hover:bg-gray-700/20">
+                <tr v-for="(row, i) in rows" :key="i" class="hover:bg-gray-700/20" :class="row.is_emergency ? 'bg-red-950/20' : ''">
                   <!-- View row -->
                   <template v-if="editIdx !== i">
                     <td class="px-3 py-2 text-blue-300 font-mono">{{ row.room_name }}</td>
@@ -51,6 +52,9 @@
                     <td class="px-3 py-2 text-gray-400 font-mono">{{ tsToTime(row.start_time) }}</td>
                     <td class="px-3 py-2 text-gray-400 font-mono">{{ tsToTime(row.end_time) }}</td>
                     <td class="px-3 py-2 text-gray-500">{{ row.notes }}</td>
+                    <td class="px-3 py-2 text-center">
+                      <span v-if="row.is_emergency" class="text-[9px] font-bold text-red-300 bg-red-700/60 px-1.5 py-0.5 rounded">急診</span>
+                    </td>
                     <td class="px-3 py-2 text-right">
                       <button class="text-gray-500 hover:text-blue-300 mr-2" title="編輯" @click="startRowEdit(i)">
                         <i class="fa-solid fa-pen text-[10px]"></i>
@@ -76,6 +80,9 @@
                     </td>
                     <td class="px-2 py-1.5">
                       <input v-model="editForm.notes" class="form-input" />
+                    </td>
+                    <td class="px-2 py-1.5 text-center">
+                      <input type="checkbox" v-model="editForm.is_emergency" class="accent-red-500" title="標記為急診房" />
                     </td>
                     <td class="px-2 py-1.5 text-right">
                       <button class="text-green-400 hover:text-green-300 mr-2" @click="confirmRowEdit(i)">
@@ -104,6 +111,9 @@
                   </td>
                   <td class="px-2 py-1.5">
                     <input v-model="addForm.notes" placeholder="備注" class="form-input" />
+                  </td>
+                  <td class="px-2 py-1.5 text-center">
+                    <input type="checkbox" v-model="addForm.is_emergency" class="accent-red-500" title="標記為急診房" />
                   </td>
                   <td class="px-2 py-1.5 text-right">
                     <button class="text-green-400 hover:text-green-300 mr-2" @click="confirmAdd">
@@ -183,8 +193,13 @@ function expandByGroups(entries: RoomScheduleEntry[]): RoomScheduleEntry[] {
   for (const entry of entries) {
     const physical = groups[entry.room_name];
     if (physical && physical.length) {
+      const groupTag = /局麻|局部/.test(entry.room_name) ? '局麻'
+        : /全麻|全身/.test(entry.room_name) ? '全麻' : '';
       for (const roomName of physical) {
-        result.push({ ...entry, id: 0, room_name: roomName });
+        const notes = groupTag && !entry.notes.includes(groupTag)
+          ? (entry.notes ? `${entry.notes} ${groupTag}` : groupTag)
+          : entry.notes;
+        result.push({ ...entry, id: 0, room_name: roomName, notes });
       }
     } else {
       result.push(entry);
@@ -250,13 +265,14 @@ onMounted(async () => {
 });
 
 // ── Edit row ──────────────────────────────────────────────────────────────────
-const editForm = reactive({ room_name: "", dept: "", startStr: "", endStr: "", notes: "" });
+const editForm = reactive({ room_name: "", dept: "", startStr: "", endStr: "", notes: "", is_emergency: false });
 
 function startRowEdit(i: number) {
   const r = rows.value[i];
   Object.assign(editForm, {
     room_name: r.room_name, dept: r.dept,
-    startStr: tsToTime(r.start_time), endStr: tsToTime(r.end_time), notes: r.notes,
+    startStr: tsToTime(r.start_time), endStr: tsToTime(r.end_time),
+    notes: r.notes, is_emergency: r.is_emergency ?? false,
   });
   editIdx.value = i;
   addMode.value = false;
@@ -270,6 +286,7 @@ function confirmRowEdit(i: number) {
     start_time: timeToTs(editForm.startStr),
     end_time:   timeToTs(editForm.endStr),
     notes: editForm.notes,
+    is_emergency: editForm.is_emergency,
     date: selectedDate.value,
   };
   editIdx.value = -1;
@@ -281,12 +298,12 @@ function deleteRow(i: number) {
 }
 
 // ── Add row ───────────────────────────────────────────────────────────────────
-const addForm = reactive({ room_name: "", dept: "", startStr: "07:30", endStr: "12:30", notes: "" });
+const addForm = reactive({ room_name: "", dept: "", startStr: "07:30", endStr: "12:30", notes: "", is_emergency: false });
 
 function startAdd() {
   addMode.value = true;
   editIdx.value = -1;
-  Object.assign(addForm, { room_name: "", dept: "", startStr: "07:30", endStr: "12:30", notes: "" });
+  Object.assign(addForm, { room_name: "", dept: "", startStr: "07:30", endStr: "12:30", notes: "", is_emergency: false });
 }
 
 function confirmAdd() {
@@ -299,6 +316,7 @@ function confirmAdd() {
     start_time: timeToTs(addForm.startStr),
     end_time:   timeToTs(addForm.endStr),
     notes: addForm.notes,
+    is_emergency: addForm.is_emergency,
   });
   addMode.value = false;
 }

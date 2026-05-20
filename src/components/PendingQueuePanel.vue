@@ -42,7 +42,7 @@
       @close="selfPayTaskId = null"
     />
 
-    <!-- Right-click menu: room selection -->
+    <!-- Right-click menu -->
     <ContextMenu
       :show="menu.open"
       :x="menu.rawX"
@@ -50,8 +50,18 @@
       @close="menu.open = false"
     >
       <div class="px-3 py-1.5 text-[10px] text-gray-500 font-semibold border-b border-gray-700">
-        排入 <span class="text-gray-200">{{ menu.patientName }}</span> 至…
+        <span class="text-gray-200">{{ menu.patientName }}</span>
       </div>
+      <!-- Smart quick assign -->
+      <button
+        class="flex items-center gap-2 w-full px-3 py-2 text-xs text-violet-300 hover:bg-violet-900/30 transition-colors text-left font-semibold"
+        @click="openQuickAssign"
+      >
+        <i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i>快速派房（智慧推薦）
+      </button>
+      <div class="border-t border-gray-700/60 my-0.5" />
+      <!-- Manual room list -->
+      <div class="px-3 py-1 text-[9px] text-gray-600 font-semibold uppercase tracking-wider">直接指派</div>
       <div v-if="roomsStore.rooms.length === 0" class="px-3 py-2 text-xs text-gray-600">尚未設定房間</div>
       <button
         v-for="r in roomsStore.rooms" :key="r.id"
@@ -70,6 +80,15 @@
         <i class="fa-solid fa-receipt text-[10px]"></i>添加自費備注
       </button>
     </ContextMenu>
+
+    <!-- Quick Assign Popover -->
+    <QuickAssignPopover
+      v-if="quickAssign.open"
+      :task="quickAssign.task!"
+      :x="quickAssign.x"
+      :y="quickAssign.y"
+      @close="quickAssign.open = false"
+    />
   </div>
 </template>
 
@@ -82,6 +101,7 @@ import PatientCard from "./PatientCard.vue";
 import ContextMenu from "./ContextMenu.vue";
 import PatientDetailModal from "./PatientDetailModal.vue";
 import SelfPayPickerModal from "./SelfPayPickerModal.vue";
+import QuickAssignPopover from "./QuickAssignPopover.vue";
 
 const props = defineProps<{ selectedDate?: string }>();
 
@@ -124,12 +144,26 @@ const selfPayTask = computed(() =>
 // ── Right-click menu ──────────────────────────────────────────────────────────
 const menu = reactive({ open: false, taskId: 0, patientName: "", rawX: 0, rawY: 0 });
 
+const quickAssign = reactive<{ open: boolean; task: SurgeryTask | null; x: number; y: number }>({
+  open: false, task: null, x: 0, y: 0,
+});
+
 function onRightClick(e: MouseEvent, task: SurgeryTask) {
   menu.open        = true;
   menu.taskId      = task.id;
   menu.patientName = task.patient_name;
   menu.rawX        = e.clientX;
   menu.rawY        = e.clientY;
+}
+
+function openQuickAssign() {
+  const task = tasksStore.tasks.find(t => t.id === menu.taskId);
+  if (!task) return;
+  quickAssign.task = task;
+  quickAssign.x    = menu.rawX;
+  quickAssign.y    = menu.rawY;
+  quickAssign.open = true;
+  menu.open = false;
 }
 
 function openSelfPay() {

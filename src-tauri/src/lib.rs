@@ -77,6 +77,10 @@ pub fn run() {
             commands::set_room_code_map,
             commands::get_room_groups,
             commands::set_room_groups,
+            commands::get_diagnosis_vocab,
+            commands::set_diagnosis_vocab,
+            commands::get_procedure_vocab,
+            commands::set_procedure_vocab,
             // Staff Roster
             commands::get_staff_roster_by_date,
             commands::replace_staff_roster_by_month,

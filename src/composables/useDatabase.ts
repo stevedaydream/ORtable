@@ -90,8 +90,8 @@ export function useSelfPayDb() {
 // ── Room Recommendation ───────────────────────────────────────────────────────
 
 export function useRoomRecommendationDb() {
-  const get = (urgency: string, dept: string, estMins: number, date: string) =>
-    invoke<RoomRecommendation[]>("get_room_recommendation", { urgency, dept, estMins, date });
+  const get = (urgency: string, dept: string, anesthesia: string, estMins: number, date: string) =>
+    invoke<RoomRecommendation[]>("get_room_recommendation", { urgency, dept, anesthesia, estMins, date });
   return { get };
 }
 
@@ -104,7 +104,15 @@ export function useSettings() {
   const setAppZoom = (zoom: number) => invoke<void>("set_app_zoom", { zoom });
   const getRoomCodeMap = () => invoke<string>("get_room_code_map");
   const setRoomCodeMap = (map: string) => invoke<void>("set_room_code_map", { map });
-  const getRoomGroups  = () => invoke<string>("get_room_groups");
-  const setRoomGroups  = (groups: string) => invoke<void>("set_room_groups", { groups });
-  return { getGasUrl, setGasUrl, getAppZoom, setAppZoom, getRoomCodeMap, setRoomCodeMap, getRoomGroups, setRoomGroups };
+  const getRoomGroups      = () => invoke<string>("get_room_groups");
+  const setRoomGroups      = (groups: string) => invoke<void>("set_room_groups", { groups });
+  const getDiagnosisVocab  = () => invoke<string>("get_diagnosis_vocab");
+  const setDiagnosisVocab  = (vocab: string) => invoke<void>("set_diagnosis_vocab", { vocab });
+  const getProcedureVocab  = () => invoke<string>("get_procedure_vocab");
+  const setProcedureVocab  = (vocab: string) => invoke<void>("set_procedure_vocab", { vocab });
+  return {
+    getGasUrl, setGasUrl, getAppZoom, setAppZoom,
+    getRoomCodeMap, setRoomCodeMap, getRoomGroups, setRoomGroups,
+    getDiagnosisVocab, setDiagnosisVocab, getProcedureVocab, setProcedureVocab,
+  };
 }

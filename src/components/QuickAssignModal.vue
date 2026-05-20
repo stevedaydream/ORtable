@@ -124,9 +124,17 @@
                   <span class="text-sm font-bold" :class="i === 0 ? 'text-gray-100' : 'text-gray-300'">
                     {{ rec.room_name }}
                   </span>
+                  <span v-if="rec.is_emergency_room"
+                    class="text-[9px] font-bold bg-red-700/60 text-red-200 border border-red-600/50 px-1 rounded">
+                    急診房
+                  </span>
                   <span v-if="rec.dept_match"
                     class="text-[9px] bg-teal-900/60 text-teal-300 border border-teal-700/50 px-1 rounded">
                     科別符合
+                  </span>
+                  <span v-if="rec.anes_conflict"
+                    class="text-[9px] bg-orange-900/60 text-orange-300 border border-orange-700/50 px-1 rounded">
+                    <i class="fa-solid fa-triangle-exclamation text-[8px] mr-0.5"></i>麻醉不符
                   </span>
                   <span v-if="rec.has_staff"
                     class="text-[9px] bg-blue-900/60 text-blue-300 border border-blue-700/50 px-1 rounded">
@@ -237,7 +245,7 @@ async function fetchRecs() {
   loading.value = true;
   selectedRoom.value = "";
   try {
-    recommendations.value = await recDb.get(form.urgency, form.dept, form.est_mins, getTodayStr());
+    recommendations.value = await recDb.get(form.urgency, form.dept, form.anesthesia, form.est_mins, getTodayStr());
   } catch (e) {
     console.error("[QuickAssign] 推薦計算失敗:", e);
   } finally {

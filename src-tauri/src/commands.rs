@@ -195,6 +195,28 @@ pub async fn set_room_groups(state: tauri::State<'_, AppState>, groups: String) 
 }
 
 #[tauri::command]
+pub async fn get_diagnosis_vocab(state: tauri::State<'_, AppState>) -> Result<String, String> {
+    let val = db::settings::get(&state.db, "diagnosis_vocab").await?;
+    Ok(val.unwrap_or_else(|| "[]".to_string()))
+}
+
+#[tauri::command]
+pub async fn set_diagnosis_vocab(state: tauri::State<'_, AppState>, vocab: String) -> Result<(), String> {
+    db::settings::set(&state.db, "diagnosis_vocab", &vocab).await
+}
+
+#[tauri::command]
+pub async fn get_procedure_vocab(state: tauri::State<'_, AppState>) -> Result<String, String> {
+    let val = db::settings::get(&state.db, "procedure_vocab").await?;
+    Ok(val.unwrap_or_else(|| "[]".to_string()))
+}
+
+#[tauri::command]
+pub async fn set_procedure_vocab(state: tauri::State<'_, AppState>, vocab: String) -> Result<(), String> {
+    db::settings::set(&state.db, "procedure_vocab", &vocab).await
+}
+
+#[tauri::command]
 pub async fn get_room_code_map(state: tauri::State<'_, AppState>) -> Result<String, String> {
     let val = db::settings::get(&state.db, "room_code_map").await?;
     Ok(val.unwrap_or_else(|| "{}".to_string()))
@@ -332,11 +354,29 @@ pub async fn delete_selfpay_item(
 
 // ── Quick Room Recommendation ─────────────────────────────────────────────────
 
+fn is_local_anes_only(shift: &RoomScheduleEntry) -> bool {
+    let text = format!("{} {}", shift.dept, shift.notes);
+    text.contains("局麻") || text.contains("局部")
+}
+
+fn requires_general_anes(anesthesia: &str) -> bool {
+    matches!(anesthesia, "全身麻醉" | "半身麻醉")
+}
+
+// Fuzzy dept match: exact OR one string contains the other (min 6 bytes ≈ 2 CJK chars to avoid single-char false positives)
+fn dept_matches(a: &str, b: &str) -> bool {
+    let a = a.trim();
+    let b = b.trim();
+    if a.is_empty() || b.is_empty() { return false; }
+    a == b || (b.len() >= 6 && a.contains(b)) || (a.len() >= 6 && b.contains(a))
+}
+
 #[tauri::command]
 pub async fn get_room_recommendation(
     state: tauri::State<'_, AppState>,
     urgency: String,
     dept: String,
+    anesthesia: String,
     est_mins: i64,
     date: String,
 ) -> Result<Vec<RoomRecommendation>, String> {
@@ -358,9 +398,12 @@ pub async fn get_room_recommendation(
 
     let preferred_rooms: Vec<String> = dept_rules
         .iter()
-        .find(|r| r.dept == dept)
+        .find(|r| dept_matches(&r.dept, &dept))
         .map(|r| r.preferred_rooms.clone())
         .unwrap_or_default();
+
+    let req_general = requires_general_anes(&anesthesia);
+    let is_urgent   = matches!(urgency.as_str(), "Trauma" | "Level1" | "Level2" | "Level3");
 
     let mut results: Vec<RoomRecommendation> = rooms.iter()
         .filter(|room| room.is_active)   // 停用房間不列入推薦
@@ -386,14 +429,22 @@ pub async fn get_room_recommendation(
             .map(|d| wait_secs + est_mins * 60 <= d)
             .unwrap_or(true);
 
-        // 當日本科別有時段排班（偏好房間 or 時段科別吻合）
-        let dept_match = preferred_rooms.contains(&room.name) ||
-            shifts.iter().any(|s| s.room_name == room.name && s.dept == dept);
-
-        // 今日有任何科別時段排班（顯示用）
-        let room_shifts: Vec<&_> = shifts.iter()
+        // 今日該房間所有時段
+        let room_shifts: Vec<&RoomScheduleEntry> = shifts.iter()
             .filter(|s| s.room_name == room.name).collect();
         let has_any_shift = !room_shifts.is_empty();
+
+        // 急診房：今日有 is_emergency 時段
+        let is_emergency_room = room_shifts.iter().any(|s| s.is_emergency);
+
+        // 麻醉衝突：全麻/半麻刀 vs 局麻房
+        let has_local_only_shift = room_shifts.iter().any(|s| is_local_anes_only(s));
+        let anes_conflict = req_general && has_local_only_shift;
+
+        // 科別符合（偏好房間 or 當日科別時段吻合），衝突時取消
+        let raw_dept_match = preferred_rooms.contains(&room.name) ||
+            shifts.iter().any(|s| s.room_name == room.name && dept_matches(&s.dept, &dept));
+        let dept_match = raw_dept_match && !anes_conflict;
 
         let room_assignments: Vec<&StaffAssignment> = assignments.iter()
             .filter(|a| a.room_name == room.name).collect();
@@ -408,8 +459,12 @@ pub async fn get_room_recommendation(
         if within_deadline { score += 3000; }
         if has_staff       { score += 1000; }
         if has_sa          { score += 200; }
-        if has_any_shift && !dept_match { score -= 500; } // 有他科排班，偏低優先
+        if has_any_shift && !dept_match && !is_emergency_room { score -= 500; }
         if room.is_backup  { score -= 1000; }
+        // 麻醉衝突：強力降分，確保排在局麻房之後
+        if anes_conflict   { score -= 6000; }
+        // 急診房加分：緊急刀（非Normal）且需全麻/半麻時才加分，避免常規待排被排入急診房
+        if is_emergency_room && req_general && is_urgent { score += 2000; }
 
         let avail_str = if is_available {
             "空刀房".to_string()
@@ -421,11 +476,18 @@ pub async fn get_room_recommendation(
         } else {
             "忙碌中".to_string()
         };
-        let dept_str = if dept_match { " · 科別符合".to_string() }
-            else if has_any_shift {
-                let depts: Vec<&str> = room_shifts.iter().map(|s| s.dept.as_str()).collect();
-                format!(" · 排班：{}", depts.join("/"))
-            } else { String::new() };
+        let dept_str = if anes_conflict {
+            " · ⚠ 局麻房，麻醉不符".to_string()
+        } else if dept_match {
+            " · 科別符合".to_string()
+        } else if is_emergency_room {
+            " · 急診房".to_string()
+        } else if has_any_shift {
+            let depts: Vec<&str> = room_shifts.iter().map(|s| s.dept.as_str()).collect();
+            format!(" · 排班：{}", depts.join("/"))
+        } else {
+            String::new()
+        };
         let reason = format!("{}{}", avail_str, dept_str);
 
         RoomRecommendation {
@@ -437,6 +499,8 @@ pub async fn get_room_recommendation(
             within_deadline,
             est_available_mins,
             reason,
+            anes_conflict,
+            is_emergency_room,
         }
     }).collect();
 

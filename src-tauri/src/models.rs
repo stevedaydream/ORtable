@@ -175,4 +175,6 @@ pub struct RoomRecommendation {
     pub within_deadline: bool,
     pub est_available_mins: i64,
     pub reason: String,
+    pub anes_conflict: bool,
+    pub is_emergency_room: bool,
 }
