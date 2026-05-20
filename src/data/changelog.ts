@@ -6,6 +6,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.1.5",
+    date: "2026-05-20",
+    changes: [
+      "feat(TaskFormModal): enhance task form with surgeon and time input, add self-pay options feat(TimelinePanel): display emergency periods and local anesthesia badges in timeline refactor(useDatabase): update room recommendation function to include anesthesia parameter feat(types): add anesthesia conflict and emergency room flags to RoomRecommendation type feat(QuickAssignPopover): implement quick room assignment with recommendations and time picker feat(VocabInput): create a reusable vocab input component for diagnosis and procedure fields",
+      "feat: add is_emergency field to room shifts and update related logic for handling emergency cases",
+    ],
+  },
+  {
     version: "0.1.4",
     date: "2026-05-20",
     changes: [
