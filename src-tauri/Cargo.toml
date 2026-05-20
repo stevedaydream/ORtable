@@ -1,6 +1,6 @@
 [package]
 name = "smart-or-triage"
-version = "0.1.3"
+version = "0.1.4"
 description = "Smart OR Triage - 智慧手術排程看板"
 authors = ["you"]
 edition = "2021"
