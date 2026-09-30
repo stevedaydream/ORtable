@@ -22,7 +22,7 @@ Actions 失敗需重跑時使用，不變更版本號，只刪除並重建 tag�
 ## GAS 部署（release.bat 選項 3）
 
 ```
-clasp push → clasp deploy --deploymentId AKfycbxmRRqtmd9lCVG8qBQ2gZ_22zAT_rvtATjQem8Fi5a-CWO-sDvs6giEvT8hqODt-Rp2
+clasp push → clasp deploy --deploymentId <見 secret.md>
 ```
 
 ## GitHub Actions 必要 Secrets
