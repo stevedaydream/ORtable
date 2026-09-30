@@ -22,8 +22,11 @@ Actions 失敗需重跑時使用，不變更版本號，只刪除並重建 tag�
 ## GAS 部署（release.bat 選項 3）
 
 ```
-clasp push → clasp deploy --deploymentId <見 secret.md>
+clasp push → clasp deploy --deploymentId %GAS_DEPLOYMENT_ID%
 ```
+
+- Deployment ID 來源：環境變數 `GAS_DEPLOYMENT_ID` 優先，否則讀 `secret.md` 中的 `GAS_DEPLOYMENT_ID=<id>` 行（值見 `secret.md`）
+- `gas/.clasp.json` 不進 git；新環境請複製 `gas/.clasp.json.example` 並填入 scriptId（見 `secret.md`）
 
 ## GitHub Actions 必要 Secrets
 

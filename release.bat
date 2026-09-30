@@ -105,7 +105,7 @@ echo   Done.
 echo.
 echo [2/4] Git commit...
 git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src/data/changelog.ts
-git add release.bat gas/.clasp.json 2>nul
+git add release.bat 2>nul
 git diff --cached --quiet
 if not errorlevel 1 (
     echo ERROR: No staged changes - version replacement may have failed
@@ -143,6 +143,18 @@ echo ========================================
 echo   Deploy GAS (clasp push + deploy)
 echo ========================================
 echo.
+if not defined GAS_DEPLOYMENT_ID if exist "%~dp0secret.md" (
+    for /f "tokens=1,* delims==" %%a in ('findstr /b /c:"GAS_DEPLOYMENT_ID=" "%~dp0secret.md"') do set "GAS_DEPLOYMENT_ID=%%b"
+)
+if not defined GAS_DEPLOYMENT_ID (
+    echo ERROR: GAS_DEPLOYMENT_ID not found.
+    echo        Set env var GAS_DEPLOYMENT_ID, or add a line "GAS_DEPLOYMENT_ID=<id>" to secret.md
+    pause & goto MENU
+)
+if not exist "%~dp0gas\.clasp.json" (
+    echo ERROR: gas\.clasp.json not found. Copy gas\.clasp.json.example and fill in scriptId.
+    pause & goto MENU
+)
 cd /d "%~dp0gas"
 
 echo [1/2] Pushing code...
@@ -151,7 +163,7 @@ if errorlevel 1 ( echo ERROR: clasp push failed & cd /d "%~dp0" & pause & goto M
 
 echo.
 echo [2/2] Updating Web App deployment...
-call clasp deploy --deploymentId AKfycbxmRRqtmd9lCVG8qBQ2gZ_22zAT_rvtATjQem8Fi5a-CWO-sDvs6giEvT8hqODt-Rp2 --description "update"
+call clasp deploy --deploymentId %GAS_DEPLOYMENT_ID% --description "update"
 if errorlevel 1 ( echo ERROR: clasp deploy failed & cd /d "%~dp0" & pause & goto MENU )
 
 cd /d "%~dp0"
